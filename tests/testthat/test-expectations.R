@@ -165,6 +165,102 @@ test_that("perfect foresight refuses rather than truncating blind", {
   expect_false(is.null(.zpf_horizon(alpha, .ref_beta, tol = .EPS_ZPF)))
 })
 
+# ---- the mechanism seam (roadmap R-4) ----
+#
+# recm_estimate() builds a mechanism once and the residual function consumes
+# its Z. These assert the contract in expectations.R for every mechanism
+# that exists, so a third one is checked without a new test being written --
+# and so the seam is exercised by something other than its only production
+# caller.
+
+.mechanisms <- function() {
+  dys <- c(NA, diff(dgp_pac$ystar))
+  vc <- .var_companion(cbind(d.ystar = dys), p = 2)
+  list(
+    var = .zmech_var(vc, 0.995),
+    # 130 clears the 119 the reference calibration needs at beta = 0.995.
+    perfect = .zmech_pf(dys, 0.995, horizon = 130L)
+  )
+}
+
+test_that("every expectations mechanism satisfies the contract", {
+  alpha <- .lq_alpha(.ref_k, 0.995)$alpha
+  s <- .scalars(alpha, 0.995)
+  Tn <- nrow(dgp_pac)
+
+  for (nm in names(.mechanisms())) {
+    mech <- .mechanisms()[[nm]]
+    expect_true(is.character(mech$name) && length(mech$name) == 1L, info = nm)
+    expect_true(is.logical(mech$support), info = nm)
+    expect_length(mech$support, Tn)
+    expect_false(anyNA(mech$support), info = nm)
+    expect_gt(sum(mech$support), 0)
+    expect_true(is.function(mech$z), info = nm)
+
+    Z <- mech$z(alpha, s)
+    expect_true(is.numeric(Z), info = nm)
+    expect_length(Z, Tn)
+    # The contract is that Z is available everywhere `support` says it is.
+    expect_false(anyNA(Z[mech$support]), info = nm)
+  }
+})
+
+test_that("mechanism support does not move with alpha", {
+  # The load-bearing half of the contract: the sample is fixed before the
+  # optimiser runs, so a support that followed theta would have the
+  # criterion comparing SSRs computed on different observations.
+  beta <- 0.995
+  a1 <- .lq_alpha(c(1, 5), beta)$alpha
+  a2 <- .lq_alpha(.ref_k, beta)$alpha
+  expect_gt(.scalars(a2, beta)$rhoG, .scalars(a1, beta)$rhoG)
+
+  for (nm in names(.mechanisms())) {
+    mech <- .mechanisms()[[nm]]
+    for (al in list(a1, a2)) {
+      Z <- mech$z(al, .scalars(al, beta))
+      expect_false(is.null(Z), info = nm)
+      expect_false(anyNA(Z[mech$support]), info = nm)
+    }
+  }
+})
+
+test_that("the VAR mechanism reproduces the construction it replaced", {
+  # estimate.R and diagnostics.R both built this by hand. Pin the mechanism
+  # against that exact expression, so the consolidation is verified rather
+  # than assumed.
+  beta <- 0.995
+  alpha <- .lq_alpha(.ref_k, beta)$alpha
+  dys <- c(NA, diff(dgp_pac$ystar))
+  vc <- .var_companion(cbind(d.ystar = dys), p = 2)
+  Tn <- nrow(vc$states)
+
+  Slag <- rbind(NA, vc$states[-Tn, , drop = FALSE])
+  by_hand <- drop(Slag %*% .hvec(alpha, beta, vc$H, sel = 2L))
+  expect_equal(.zmech_var(vc, beta)$z(alpha, .scalars(alpha, beta)), by_hand)
+  # and the sample it implies is the one complete.cases(Slag) gave
+  expect_equal(.zmech_var(vc, beta)$support, stats::complete.cases(Slag))
+})
+
+test_that("a mechanism refuses an alpha it cannot serve", {
+  beta <- 0.995
+  dys <- c(NA, diff(dgp_pac$ystar))
+
+  # Perfect foresight at a horizon too short for this alpha: refused, not
+  # truncated early, because the remainder would then be unbounded.
+  alpha <- .lq_alpha(.ref_k, beta)$alpha
+  need <- .zpf_horizon(alpha, beta)
+  expect_gt(need, 20)
+  s <- .scalars(alpha, beta)
+  expect_null(.zmech_pf(dys, beta, horizon = 20L)$z(alpha, s))
+  expect_false(is.null(.zmech_pf(dys, beta, horizon = need)$z(alpha, s)))
+
+  # The VAR mechanism refuses on its own condition, rho(G)rho(H) >= 1.
+  vc <- .var_companion(cbind(d.ystar = dys), p = 2)
+  bad <- c(0, -1.5)
+  expect_gt(.scalars(bad, beta)$rhoG, 1)
+  expect_null(.zmech_var(vc, beta)$z(bad, .scalars(bad, beta)))
+})
+
 test_that("the horizon is where the exact remainder falls below tol", {
   alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
   s <- .scalars(alpha, .ref_beta)

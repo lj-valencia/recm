@@ -5,8 +5,12 @@
 #
 #   theta --.k_from_theta()--> k --.lq_alpha()--> alpha
 #         --.alpha_to_a()/.scalars()--> a, G, sum_d
-#         --.hvec()--> h, so Z_t = h' z_{t-1}
+#         --zmech$z()--> Z, the forward sum
 #         --> residual --> SSR or GMM criterion
+#
+# The mechanism supplying Z is built once, before the optimiser, and the
+# residual function consumes its output without knowing how it was made.
+# Under `.zmech_var()` that is Z_t = h' z_{t-1}, the VAR closure.
 
 # Penalty returned to the optimiser for an inadmissible theta. R-2 will
 # replace this cliff with a continuous boundary penalty -- Nelder-Mead
@@ -233,8 +237,8 @@
 #'
 #' @return An object of class `recmfit`, a list with `theta`, `par`, `vcov`,
 #'   `alpha`, `a`, `k`, `scalars`, `a_f`, `delta`, `residuals`, `fitted`,
-#'   `dep`, `index`, `n`, `npar`, `var`, `extras` and `converged`, plus two
-#'   closures:
+#'   `dep`, `index`, `n`, `npar`, `var`, `extras`, `converged`, the column
+#'   names `y`, `ystar`, `vars_names` and `growth_name`, plus two closures:
 #'
 #'   \describe{
 #'     \item{`alpha_fn(theta)`}{maps any `theta` to `alpha`; powers
@@ -406,7 +410,13 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
     Xe <- cbind(Xe, Ex[, setdiff(colnames(Ex), colnames(Xe)), drop = FALSE])
   }
   vc <- .var_companion(Xe, var_lags)
-  Slag <- rbind(NA, vc$states[-Tn, , drop = FALSE])
+
+  # ---- expectations mechanism, built once ----
+  # Built here, outside the optimiser, for the same reason the VAR itself
+  # is: `zmech$support` fixes the estimation sample, and a sample that moved
+  # with theta would make the criterion incomparable across trial values.
+  # See the mechanism contract in expectations.R.
+  zmech <- .zmech_var(vc, beta)
 
   # ---- GMM instruments ----
   # Only the columns built from `y` or `ystar` carry the dating rule: the
@@ -465,7 +475,12 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
   }
 
   # ---- sample ----
-  parts <- cbind(dy, ecm, DYL, Slag, gr, Ziv)
+  # The mechanism decides which rows it can supply Z for; as an NA-coded
+  # column that lets complete.cases() do the rest. This used to be the whole
+  # `Slag` matrix, which was the VAR mechanism's answer to the same question
+  # spelled out at the call site.
+  zsup <- ifelse(zmech$support, 0, NA_real_)
+  parts <- cbind(dy, ecm, DYL, zsup, gr, Ziv)
   if (nw) parts <- cbind(parts, W)
   ok <- which(stats::complete.cases(parts))
   if (length(ok) < 5 * (m + nw)) {
@@ -484,14 +499,17 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
     if (is.null(lq) || !lq$converged || lq$maxeig >= 1) return(NULL)
     al <- lq$alpha
     s <- .scalars(al, beta)
-    if (is.null(s) || s$rhoG * vc$rho >= 1) return(NULL)
-    hv <- .hvec(al, beta, vc$H, 2L)
-    if (is.null(hv)) return(NULL)
+    if (is.null(s)) return(NULL)
+    # Z comes IN from the mechanism; this function no longer knows how it
+    # was made. The admissibility test that used to live here --
+    # rho(G)rho(H) >= 1 -- went with it, because it is the VAR mechanism's
+    # condition and not every mechanism's. See expectations.R.
+    Zm <- zmech$z(al, s)
+    if (is.null(Zm)) return(NULL)
     aa <- .alpha_to_a(al)
-    Zraw <- drop(Slag %*% hv)
     corr <- if (do_growth) (1 - sum(aa[-1]) - s$sum_d) * gr else 0
     list(alpha = al, a = aa, s = s, k = kk,
-         Zraw = Zraw + corr, Znorm = (Zraw + corr) / s$sum_d)
+         Zraw = Zm + corr, Znorm = (Zm + corr) / s$sum_d)
   }
 
   # Linear block, concentrated out: [a_f on Znorm if free] + [delta on W].
@@ -706,11 +724,46 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
               var = vc, extras = extras, converged = fit$convergence == 0,
               vars_names = if (nw) colnames(W) else character(0),
               objective = objective,
-              y = y, ystar = ystar,
+              y = y, ystar = ystar, growth_name = growth,
               alpha_fn = function(t2) {
                 bb <- build(t2)
                 if (is.null(bb)) rep(NA_real_, m) else bb$alpha
               })
   class(out) <- "recmfit"
   out
+}
+
+
+# ---- the estimation frame ----
+#
+# `objective` is a closure over recm_estimate()'s evaluation frame, so that
+# frame stays alive for as long as the fit does, and it is where `data` and
+# the resolved specification live. recm_boot() and predict.recmfit() both
+# have to rebuild the design on resampled or new observations, and both read
+# it from here rather than from a copy stored on the object: a copy could go
+# stale against the closures, which are what recm_profile() and the
+# delta-method standard errors actually evaluate.
+#
+# Reading it post-`subset` is the point, not an accident -- the design is
+# rebuilt on the rows that were estimated on.
+#
+# The trade is the documented one (docs/01, "Object model"): a `recmfit` is
+# not portable across sessions without its data. Both callers previously
+# reached in by name with no check beyond `data`; a frame missing anything
+# else they read would have produced predictions from a half-built design
+# rather than an error.
+.fit_env <- function(object, need = character(0)) {
+  env <- environment(object$objective)
+  if (!is.environment(env) || is.null(env$data)) {
+    stop("the fit's closures no longer carry their data; a `recmfit` is ",
+         "not portable across sessions (see docs/01-architecture.md)")
+  }
+  miss <- need[!vapply(need, exists, logical(1), envir = env,
+                       inherits = FALSE)]
+  if (length(miss)) {
+    stop("the fit's estimation frame is missing ",
+         paste(miss, collapse = ", "),
+         "; it did not come from this version of recm_estimate()")
+  }
+  env
 }

@@ -102,9 +102,33 @@ itself on a path a VAR(2) forecasts exactly — agreement 1.1e-10, which is
 the truncation tolerance and nothing else. That last one also pins the `t-1`
 dating, the easiest thing to get wrong when the second call site is written.
 
-Still to do here: the residual-function refactor, the
-`expectations_backend` argument, and the certainty-equivalence check against
-a direct quadratic-program solution that the note above describes.
+**The residual-function refactor is done.** `recm_estimate()` builds a
+mechanism once and the residual function consumes its `Z` without knowing
+the provenance; `.zmech_var()` and `.zmech_pf()` both satisfy the contract
+in `docs/01`, and `diagnostics.R` no longer builds `Z` by hand. Behaviour is
+unchanged — every frozen value in `test-regression.R` is unmoved.
+
+**What is left, and the decision blocking it.** Adding
+`expectations_backend = c("var", "perfect")` needs one question answered
+that the refactor deliberately did not answer: **how is the perfect-foresight
+horizon chosen?** It cannot follow `alpha`, because `support` fixes the
+estimation sample before the optimiser runs and a sample that moved with
+theta would have the criterion comparing SSRs over different observations.
+So `.zmech_pf()` takes a fixed horizon and refuses any `alpha` needing more.
+That is correct but it makes the horizon a *tuning parameter with teeth*:
+
+- too short and it silently truncates the admissible parameter space,
+  rejecting sluggish adjustment rather than estimating it;
+- too long and it eats the sample, at 1 observation per period of horizon.
+
+Three options, none obviously right. Fix it from a user-supplied worst-case
+`rho(G)`; derive it from a first-pass VAR fit and hold it; or expose it and
+document the trade. Whichever is chosen, `summary()` must report the horizon
+and the lost observations — this is not a detail a user can be left to
+infer.
+
+Also still open: the certainty-equivalence check against a direct
+quadratic-program solution described above.
 
 ---
 

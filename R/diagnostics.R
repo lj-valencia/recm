@@ -197,12 +197,8 @@ recm_boot <- function(object, R = 299, var_error = TRUE, eq_error = TRUE,
   if (!is.null(seed)) set.seed(seed)
   if (!inherits(object, "recmfit")) stop("`object` must be a `recmfit`")
 
-  env <- environment(object$objective)
+  env <- .fit_env(object, c("vc", "Xe", "ok", "yv", "ysv", "W", "diff_exp"))
   data <- env$data
-  if (is.null(data)) {
-    stop("the fit's closures no longer carry their data; a `recmfit` is ",
-         "not portable across sessions (see docs/01-architecture.md)")
-  }
   if (object$growth) {
     stop("recm_boot() does not support `growth` yet; the correction ",
          "depends on sum(d_i), which moves with every replication")
@@ -278,10 +274,14 @@ recm_boot <- function(object, R = 299, var_error = TRUE, eq_error = TRUE,
     # Forward loading under the new H*, at the FITTED alpha.
     vcb <- tryCatch(.var_companion(Xb, p), error = function(e) NULL)
     if (is.null(vcb)) next
-    hb <- .hvec(object$alpha, object$beta, vcb$H, 2L)
-    if (is.null(hb)) next
-    Slag_b <- rbind(NA, vcb$states[-Tn, , drop = FALSE])
-    Zb <- drop(Slag_b %*% hb)
+    # Through the mechanism, not by hand: this was a second copy of the
+    # h-then-lag-the-states construction and would have drifted from the
+    # one in estimate.R. A fresh mechanism per replicate is correct -- H*
+    # is re-estimated on the resampled data.
+    sb <- .scalars(object$alpha, object$beta)
+    if (is.null(sb)) next
+    Zb <- .zmech_var(vcb, object$beta)$z(object$alpha, sb)
+    if (is.null(Zb)) next
     if (object$free_forward) Zb <- object$a_f * Zb / object$scalars$sum_d
 
     # Wild-bootstrap the equation error and regenerate y recursively.

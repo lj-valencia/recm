@@ -106,6 +106,32 @@ release was scaffolding only.
 
 ### Expectations
 
+* **The residual function no longer builds `Z`; it takes one.** A mechanism
+  is built once in `recm_estimate()`, before the optimiser, and supplies the
+  forward sum. This is the refactor `docs/01` and roadmap R-4 had deferred
+  until a second mechanism existed. Behaviour is unchanged: every frozen
+  value in `test-regression.R` is unmoved.
+* A mechanism is `name`, `support` and `z(alpha, s)`. **`support` — the rows
+  it can supply `Z` for at any admissible `alpha` — must not depend on
+  `theta`**, because it is what fixes the estimation sample before the
+  optimiser runs. It replaces the `Slag` matrix in the `complete.cases()`
+  that builds `ok`, which was the VAR mechanism's answer to that question
+  written out at the call site.
+* The `rho(G) rho(H) >= 1` admissibility test moved out of the residual
+  builder and into `.zmech_var()`, where it belongs: it is INVARIANT 8 for
+  the VAR closure specifically, and perfect foresight carries no `H`. It
+  read as universal in the old position when it never was.
+* `.zmech_pf()` takes a **fixed** horizon and refuses any `alpha` needing
+  more, rather than shortening the sum. A horizon that followed `alpha`
+  would move the sample with `theta`.
+* `recm_boot()` no longer builds `Z` by hand. It had its own copy of the
+  `.hvec()`-then-lag-the-states construction, which would have drifted from
+  the one in `estimate.R`.
+* Not yet exposed: there is still no `expectations_backend` argument.
+  Choosing the perfect-foresight horizon is a real trade — too short
+  truncates the admissible parameter space, too long eats the sample — and
+  R-4 now records the options rather than a silent default.
+
 * **A second expectations mechanism, `.zpf()`, perfect foresight** — the
   forward sum taken over the realised `d(ystar)` path rather than over VAR
   forecasts. Internal and standalone: nothing in `recm_estimate()` calls it,

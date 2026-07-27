@@ -108,6 +108,24 @@ printed lag list; the count of suppressed lags is shown.
 
 ---
 
+## `predict()`
+
+```r
+predict(object, newdata = NULL,
+        interval = c("none", "confidence", "prediction"),
+        level = 0.95, type = c("diff", "level"),
+        boot_object = NULL, quiet = FALSE, ...)
+```
+
+Obtains predictions and optional confidence or prediction intervals from a fitted `recmfit` object, matching standard `predict.lm()` conventions.
+
+- `newdata`: optional `data.frame` containing out-of-sample observations.
+- `type`: `"diff"` (predicts \eqn{\Delta y_t}) or `"level"` (predicts \eqn{y_t = y_{t-1} + \Delta y_t}).
+- `interval`: `"none"`, `"confidence"`, or `"prediction"`.
+- `boot_object`: optional `recm_boot` object from `recm_boot()`. When supplied, standard errors and intervals are computed across bootstrap replicates. When `NULL`, delta-method standard errors are used.
+
+---
+
 ## `lead_weights()`
 
 ```r
