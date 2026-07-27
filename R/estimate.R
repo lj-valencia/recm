@@ -22,39 +22,122 @@
 
 # ---- cost parameterisations ----
 #
-# Extension point: a new cost parameterisation is added by implementing it
-# in these three functions. Nothing downstream changes.
+# Extension point (docs/01-architecture.md). A parameterisation is one entry
+# in .COST plus one word in the `cost` vector of recm_estimate()'s signature.
+# Nothing else in the package branches on `cost`.
 #
 #   "geometric"  k_j = kappa * psi^(j-1), j = 1..m   -> 2 free parameters
 #   "free"       each k_j free                       -> m free parameters
 #
 # k_0 is normalised to 1 throughout; only ratios are identified.
-
-.k_from_theta <- function(th, m, cost) {
-  if (cost == "geometric") {
-    kappa <- exp(th[1])
-    psi <- 1 / (1 + exp(-th[2]))
-    c(1, kappa * psi^(0:(m - 1)))
-  } else {
-    c(1, exp(th))
+#
+# Every entry must supply all seven fields, and they must agree on the
+# parameter count: names(), natural(), start() all have length npar(m) and
+# grid() has npar(m) columns. test-cost.R asserts exactly that for every
+# registered entry, so a new one is checked without writing a new test.
+#
+#   npar(m)      integer, number of free parameters at order m
+#   k(th, m)     theta -> cost vector, length m+1, k[1] == 1
+#   names(m)     labels on the OPTIMISATION scale (these reach summary())
+#   natural(th, m)  named vector on the interpretable scale
+#   start(m)     default starting value
+#   grid(m)      npar(m)-column matrix of fallback starts, tried in order
+#                when start(m) is inadmissible
+#   warn(m)      character(1) warning, or NULL if the order is sensible
+#
+# This used to be three functions each shaped `if (cost == "geometric") ...
+# else ...`, with starting values and the restart grid written the same way
+# at their call sites. A name that reached those `else` branches was silently
+# treated as "free": .k_from_theta() returned c(1, exp(th)), a perfectly
+# plausible cost vector, and estimation ran to completion on it. Dispatch is
+# now a lookup that stops on an unknown name.
+.cost_spec <- function(cost) {
+  spec <- .COST[[cost]]
+  if (is.null(spec)) {
+    stop("unknown cost parameterisation '", cost, "'. Registered: ",
+         paste(names(.COST), collapse = ", "),
+         ". A new one is an entry in .COST plus a word in the `cost` ",
+         "argument of recm_estimate() -- see docs/01-architecture.md.")
   }
+  spec
 }
 
-.theta_names <- function(m, cost) {
-  if (cost == "geometric") {
-    c("log kappa", "logit psi")
-  } else {
-    paste0("log k", seq_len(m))
-  }
-}
+.COST <- list(
+  geometric = list(
+    npar = function(m) 2L,
+    k = function(th, m) {
+      kappa <- exp(th[1])
+      psi <- 1 / (1 + exp(-th[2]))
+      c(1, kappa * psi^(0:(m - 1)))
+    },
+    names = function(m) c("log kappa", "logit psi"),
+    natural = function(th, m) {
+      c(kappa = unname(exp(th[1])), psi = unname(1 / (1 + exp(-th[2]))))
+    },
+    start = function(m) c(log(20), 0),
+    grid = function(m) {
+      unname(as.matrix(expand.grid(log(c(1, 5, 20, 100)), c(-2, -1, 0, 1))))
+    },
+    warn = function(m) NULL
+  ),
+  free = list(
+    npar = function(m) as.integer(m),
+    k = function(th, m) c(1, exp(th)),
+    names = function(m) paste0("log k", seq_len(m)),
+    natural = function(th, m) {
+      stats::setNames(exp(th), paste0("k", seq_len(m)))
+    },
+    start = function(m) rep(log(5), m),
+    grid = function(m) matrix(rep(log(c(0.5, 2, 10)), m), ncol = m),
+    warn = function(m) {
+      if (m <= .M_FREE_MAX) return(NULL)
+      paste0("cost = \"free\" with m = ", m, " > ", .M_FREE_MAX,
+             ": Var((1-L)^j y) grows like choose(2(j-1), j-1), so the k_j ",
+             "would have to span ten orders of magnitude to contribute ",
+             "comparably. Use cost = \"geometric\".")
+    }
+  )
+)
 
-.theta_natural <- function(th, m, cost) {
-  if (cost == "geometric") {
-    c(kappa = unname(exp(th[1])), psi = unname(1 / (1 + exp(-th[2]))))
-  } else {
-    stats::setNames(exp(th), paste0("k", seq_len(m)))
-  }
-}
+# ---- estimators ----
+#
+# Extension point (docs/01-architecture.md). Unlike the cost registry above
+# this is a documented contract rather than a lookup table, deliberately:
+# the two estimators share the residual function and little else, and GMM
+# has to build its instruments BEFORE sample selection -- upstream of
+# anywhere a plug-in function could run. See docs/01 for the reasoning.
+#
+# Adding an estimator is three edits:
+#
+#   1. the name in recm_estimate()'s `method` argument
+#   2. if it needs the automatic instruments, add it to .METHODS_IV
+#   3. a branch in the estimator block that sets ALL SEVEN of
+#
+#        th        theta at the optimum
+#        r         resid_full(th); carries $b, $lin, $e
+#        par_all   c(th, r$lin), the full parameter vector
+#        V         covariance, length(par_all) square
+#        fit       optimiser result; only $convergence is read
+#        extras    estimator-specific diagnostics, possibly empty list
+#        objective closure giving the criterion at any theta
+#
+# docs/01 used to name only th, V and extras. Setting the other four is not
+# optional -- the object assembly at the end of recm_estimate() reads every
+# one of them.
+#
+# Estimators whose branch consumes `Ziv`. This gate used to be written as a
+# bare `method == "gmm"` at the instrument block, which made it an invisible
+# second edit site: a new estimator reached that block, got Ziv = NULL, and
+# died inside apply() with "dim(X) must have a positive length".
+.METHODS_IV <- c("gmm")
+
+.k_from_theta <- function(th, m, cost) .cost_spec(cost)$k(th, m)
+
+.theta_names <- function(m, cost) .cost_spec(cost)$names(m)
+
+.theta_natural <- function(th, m, cost) .cost_spec(cost)$natural(th, m)
+
+.theta_npar <- function(m, cost) .cost_spec(cost)$npar(m)
 
 
 # ---- main entry point ----
@@ -137,11 +220,16 @@
 #' @param hac_lags integer Newey-West bandwidth; `NULL` uses
 #'   `floor(4 * (T/100)^(2/9))`.
 #' @param start numeric vector of starting values on the optimisation scale.
+#'   Must have one element per free cost parameter — two under
+#'   `cost = "geometric"`, `m` under `cost = "free"` — and is checked.
 #' @param subset logical or integer vector selecting rows of `data`.
 #' @param maxit integer, optimiser iteration limit.
 #' @param restarts integer, number of times Nelder-Mead is re-run from its
 #'   own solution. This matters: a single pass routinely stops short.
-#' @param quiet logical; suppress the `beta = 1` warning.
+#' @param quiet logical; suppress the `beta = 1` warning. The
+#'   variance-amplification warning under `cost = "free"` is not suppressed
+#'   by it — that one says the specification is meaningless, not that a
+#'   default was taken.
 #'
 #' @return An object of class `recmfit`, a list with `theta`, `par`, `vcov`,
 #'   `alpha`, `a`, `k`, `scalars`, `a_f`, `delta`, `residuals`, `fitted`,
@@ -279,12 +367,11 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
             "through the adjustment cost roots. Consider beta = 1/(1+r) ",
             "with a real quarterly rate.", call. = FALSE)
   }
-  if (cost == "free" && m > .M_FREE_MAX) {
-    warning("cost = \"free\" with m = ", m, " > ", .M_FREE_MAX,
-            ": Var((1-L)^j y) grows like choose(2(j-1), j-1), so the k_j ",
-            "would have to span ten orders of magnitude to contribute ",
-            "comparably. Use cost = \"geometric\".", call. = FALSE)
-  }
+  # Deliberately NOT gated on `quiet`, unlike the beta warning above: this
+  # one says the specification is meaningless, not that a default was taken.
+  cspec <- .cost_spec(cost)
+  cwarn <- cspec$warn(m)
+  if (!is.null(cwarn)) warning(cwarn, call. = FALSE)
   if (!is.null(subset)) data <- data[subset, , drop = FALSE]
 
   yv <- data[[y]]
@@ -333,7 +420,7 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
   # and be dropped wholesale by the finiteness filter below -- a silent
   # loss of every automatic instrument.
   Ziv <- NULL
-  if (method == "gmm") {
+  if (method %in% .METHODS_IV) {
     if (is.null(iv_lag)) iv_lag <- var_lags + 2L
     iv_lag <- as.integer(iv_lag)
     if (is.na(iv_lag) || iv_lag < 1L) {
@@ -442,17 +529,24 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
   }
 
   # ---- starting values ----
+  # Both the default and the fallback grid come from the parameterisation,
+  # not from a branch here. They used to be written as `if geometric ... else
+  # <the "free" shape>`, which handed any other parameterisation a theta of
+  # length m; .k_from_theta() then read it positionally and returned numbers.
+  npar_th <- cspec$npar(m)
   if (is.null(start)) {
-    th0 <- if (cost == "geometric") c(log(20), 0) else rep(log(5), m)
+    th0 <- cspec$start(m)
   } else {
+    if (length(start) != npar_th) {
+      stop("`start` has length ", length(start), " but cost = \"", cost,
+           "\" at m = ", m, " takes ", npar_th, " parameter",
+           if (npar_th == 1) "" else "s", ": ",
+           paste(cspec$names(m), collapse = ", "))
+    }
     th0 <- start
   }
   if (is.null(build(th0))) {
-    grid <- if (cost == "geometric") {
-      as.matrix(expand.grid(log(c(1, 5, 20, 100)), c(-2, -1, 0, 1)))
-    } else {
-      matrix(rep(log(c(0.5, 2, 10)), m), ncol = m)
-    }
+    grid <- cspec$grid(m)
     for (i in seq_len(nrow(grid))) {
       if (!is.null(build(as.numeric(grid[i, ])))) {
         th0 <- as.numeric(grid[i, ])
@@ -496,7 +590,7 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
                   error = function(e) matrix(NA_real_, npar, npar))
     extras <- list()
     objective <- ssr
-  } else {
+  } else if (method == "gmm") {
     n_supplied <- ncol(Ziv)
     Zi <- Ziv[ok, , drop = FALSE]
     # Column 1 is the intercept and is exempt from the variance filter --
@@ -578,6 +672,15 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
                    n_instruments_supplied = n_supplied,
                    iv_lag = iv_lag)
     objective <- function(t2) Q(t2, W2)
+  } else {
+    # Not reachable from user code -- match.arg() above rejects an unknown
+    # name first. This catches the developer who added an estimator to the
+    # `method` argument and not here, which previously fell through to the
+    # GMM branch. Do not delete it as dead code.
+    stop("estimator '", method, "' is accepted by the `method` argument but ",
+         "has no branch in recm_estimate(). It must set th, r, par_all, V, ",
+         "fit, extras and objective -- see the estimator extension point in ",
+         "docs/01-architecture.md.")
   }
 
   names(par_all) <- c(.theta_names(m, cost),

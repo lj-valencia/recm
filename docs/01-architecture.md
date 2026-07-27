@@ -138,11 +138,95 @@ serialising the design matrices.
 
 ## Extension points
 
-Adding a new **cost parameterisation**: implement in `.k_from_theta()`,
-`.theta_names()`, `.theta_natural()`. Nothing downstream changes.
+Adding a new **cost parameterisation**: one entry in the `.COST` registry in
+`estimate.R`, plus the new name in the `cost` argument of `recm_estimate()`.
+Nothing else in the package branches on `cost`.
 
-Adding a new **estimator**: add a branch in `recm_estimate()` that produces
-`theta`, `V`, and `extras`. The residual function is shared.
+An entry supplies seven fields, all functions of `m`:
+
+| Field | Returns |
+|---|---|
+| `npar(m)` | number of free parameters at order `m` |
+| `k(th, m)` | cost vector, length `m+1`, with `k[1] == 1` |
+| `names(m)` | labels on the **optimisation** scale (these reach `summary()`) |
+| `natural(th, m)` | named vector on the interpretable scale |
+| `start(m)` | default starting value |
+| `grid(m)` | `npar(m)`-column matrix of fallback starts, tried in order when `start(m)` is inadmissible |
+| `warn(m)` | `character(1)` if the order is a bad idea, else `NULL` |
+
+The first four are reached through the thin wrappers `.k_from_theta()`,
+`.theta_names()`, `.theta_natural()` and `.theta_npar()`; those names are
+kept because they read better at the call sites, not because they hold any
+logic.
+
+`npar(m)` is the contract: `names()`, `natural()` and `start()` must all have
+that length and `grid()` must have that many columns. `test-cost.R` loops the
+registry and asserts it at several `m`, so **a new entry is checked without
+anyone writing a new test** — if you add one and that file starts failing,
+the entry is inconsistent.
+
+Both edit sites fail loudly if you do only one. A name in the signature but
+not the registry reaches `.cost_spec()` and stops with the registered set in
+the message; a name in the registry but not the signature is rejected by
+`match.arg()`. Neither can silently estimate the wrong model — which is what
+the previous structure did, three functions each shaped
+`if (cost == "geometric") ... else ...`, where any unrecognised name fell
+into the `else` and was quietly treated as `"free"`.
+
+Verified end to end by adding a third parameterisation with `npar = 1`
+(constant costs, a count equal to neither `2` nor `m`) and touching only
+those two sites: NLS and GMM both fit, and `summary()`, `coef()`, `vcov()`,
+`confint()`, `equation()`, `lead_weights()` and `recm_profile()` all worked
+unchanged.
+
+One caveat found doing that: at `npar = 1`, `stats::optim()` warns that
+one-dimensional Nelder-Mead is unreliable. The fit is fine on this fixture,
+but a one-parameter parameterisation should probably route to `"Brent"`, and
+nothing does that today.
+
+Adding a new **estimator**: the residual function is shared, and the rest is
+a documented contract rather than a registry. Three edits.
+
+1. The name in `recm_estimate()`'s `method` argument.
+2. If it consumes the automatic instruments, add it to `.METHODS_IV`. That
+   gate used to be a bare `method == "gmm"` at the instrument block, which
+   made it an invisible second edit site — a new estimator reached the block,
+   got `Ziv = NULL`, and died inside `apply()` with `dim(X) must have a
+   positive length`.
+3. A branch in the estimator block that sets **all seven** of:
+
+| Name | What |
+|---|---|
+| `th` | `theta` at the optimum |
+| `r` | `resid_full(th)`; carries `$b`, `$lin`, `$e` |
+| `par_all` | `c(th, r$lin)`, the full parameter vector |
+| `V` | covariance, `length(par_all)` square |
+| `fit` | optimiser result; only `$convergence` is read |
+| `extras` | estimator-specific diagnostics, possibly an empty list |
+| `objective` | closure giving the criterion at any `theta` |
+
+This section previously named only `theta`, `V` and `extras`. The other four
+are not optional — the object assembly at the end of `recm_estimate()` reads
+every one of them, so a branch written to the old description produced a
+half-built `recmfit`.
+
+A branch that is declared but not written now hits an explicit `stop()`
+naming the seven fields. That guard is unreachable from user code, because
+`match.arg()` rejects an unknown name first; it exists for the developer
+mid-edit and should not be deleted as dead code.
+
+`extras` is duck-typed on purpose: `print.summary.recmfit()` tests each field
+for `NULL` rather than branching on `method`, so a new estimator can print
+its own diagnostics without touching `methods.R`.
+
+**Why a contract and not a `.COST`-style registry.** The two estimators share
+the residual function and almost nothing else, and the asymmetry is
+structural rather than incidental: GMM must build its instruments *before*
+sample selection, because the longer lags shorten the estimation sample —
+which is upstream of anywhere a plug-in estimator function could run. A
+registry would have to hoist that, and there is no third estimator on the
+roadmap to justify the restructure. Revisit if one lands; R-6
+(Anderson-Rubin) inverts the existing GMM criterion and does not count.
 
 Adding a new **expectations mechanism** (e.g. model-consistent rather than
 VAR): implement an alternative to `.hvec()` returning a `Z_t` series. The

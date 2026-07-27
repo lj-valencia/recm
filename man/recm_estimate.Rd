@@ -114,7 +114,9 @@ exact optimum.}
 \item{hac_lags}{integer Newey-West bandwidth; \code{NULL} uses
 \code{floor(4 * (T/100)^(2/9))}.}
 
-\item{start}{numeric vector of starting values on the optimisation scale.}
+\item{start}{numeric vector of starting values on the optimisation scale.
+Must have one element per free cost parameter — two under
+\code{cost = "geometric"}, \code{m} under \code{cost = "free"} — and is checked.}
 
 \item{subset}{logical or integer vector selecting rows of \code{data}.}
 
@@ -123,7 +125,10 @@ exact optimum.}
 \item{restarts}{integer, number of times Nelder-Mead is re-run from its
 own solution. This matters: a single pass routinely stops short.}
 
-\item{quiet}{logical; suppress the \code{beta = 1} warning.}
+\item{quiet}{logical; suppress the \code{beta = 1} warning. The
+variance-amplification warning under \code{cost = "free"} is not suppressed
+by it — that one says the specification is meaningless, not that a
+default was taken.}
 }
 \value{
 An object of class \code{recmfit}, a list with \code{theta}, \code{par}, \code{vcov},

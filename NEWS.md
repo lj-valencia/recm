@@ -54,6 +54,56 @@ release was scaffolding only.
 * Hansen J on the correctly specified fixture improved from `p = 2.8e-05` to
   `p = 0.0032`, but still rejects. Roadmap R-11.
 
+### Cost parameterisations
+
+* **The extension point in `docs/01-architecture.md` now works as
+  advertised.** It claimed a new cost parameterisation was three functions
+  and that "nothing downstream changes"; both halves were wrong.
+* Dispatch was `if (cost == "geometric") ... else ...` in `.k_from_theta()`,
+  `.theta_names()` and `.theta_natural()`, so **any name that was not
+  `"geometric"` was silently treated as `"free"`** — `.k_from_theta()`
+  returned `c(1, exp(th))`, a perfectly plausible cost vector, and
+  estimation ran to completion on the wrong model. Dispatch is now a lookup
+  in a `.COST` registry that `stop()`s on an unregistered name.
+* Starting values and the fallback restart grid were written the same way at
+  their call sites, and the `cost = "free"` order warning was a third such
+  branch, so *three* things downstream did change. All three now come from
+  the registry entry. A parameterisation whose parameter count is neither
+  `2` nor `m` previously got a starting vector of length `m`, which
+  `.k_from_theta()` then read positionally without error.
+* `npar(m)` makes the parameter count explicit; `test-cost.R` loops the
+  registry and asserts `names()`, `natural()`, `start()` and `grid()` all
+  agree with it, so a parameterisation added later is checked without a new
+  test being written.
+* **A wrong-length `start` now errors** instead of being read positionally.
+* `cost = "free"` is now exercised end to end. The suite previously tested
+  only that it *warns* above `m = 4`, never that it fits.
+* No behaviour change for `"geometric"` or `"free"`: every frozen value in
+  `test-regression.R` is unmoved.
+
+### Estimators
+
+* **The estimator extension point in `docs/01-architecture.md` described
+  three of the seven things a branch must set.** `th`, `V` and `extras` were
+  named; `r`, `par_all`, `fit` and `objective` were not, and the object
+  assembly reads all seven, so a branch written to the documentation
+  produced a half-built `recmfit`. The full contract is now in `docs/01` and
+  in a banner above the estimator block.
+* The dispatch was `if (method == "nls") ... else <gmm>`, so a third
+  estimator declared in the `method` argument but not branched **silently
+  entered the GMM branch** and failed at `dim(X) must have a positive
+  length`, from `apply()` on a NULL instrument matrix. It is now
+  `else if (method == "gmm")` with a terminal `stop()` naming the seven
+  fields. That guard is unreachable from user code — `match.arg()` rejects
+  unknown names first — and exists for the developer mid-edit.
+* The instrument block gated on a bare `method == "gmm"`, an invisible
+  second edit site. It now gates on `.METHODS_IV`.
+* `test-estimators.R` asserts the contract in positive form for every
+  implemented estimator, so a new branch that sets only what the old
+  documentation named fails there rather than returning an object.
+* No behaviour change: both estimators produce byte-identical results, and
+  every frozen value in `test-regression.R` is unmoved.
+
 ### Numerics
 
 * **The Riccati iteration now converges on the feedback gain, not on `P`.**
@@ -119,8 +169,10 @@ Flagged rather than silently reconciled.
 
 ### Testing
 
-* 196 tests, no skips. All eight invariant tests from `docs/04-testing.md`
-  pass, INVARIANT 3 in the restated form above.
+* 476 passing expectations, no skips. All eight invariant tests from
+  `docs/04-testing.md` pass, INVARIANT 3 in the restated form above. The
+  count is up from 196 largely because `test-cost.R` loops the `.COST`
+  registry across several `m` rather than naming each parameterisation.
 * Fixtures `simulate_dgp_pac()` / `simulate_dgp_ecm()` in
   `tests/testthat/helper-recm.R`, with the target's forward sum in closed
   form so the fixture satisfies the Euler equation exactly rather than
