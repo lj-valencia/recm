@@ -72,7 +72,7 @@ standard errors came in at roughly half the true sampling standard deviation.
 ## Status
 
 Pre-release, but working: the estimator, both reporting formats and the
-diagnostics are implemented, with 435 passing expectations and a clean
+diagnostics are implemented, with 476 passing expectations and a clean
 `devtools::check()`. Consistency is verified against a synthetic REC DGP at
 `T = 4000`; at `T = 178` there is a genuine finite-sample downward bias in
 `|a_0|` of roughly half a standard deviation.

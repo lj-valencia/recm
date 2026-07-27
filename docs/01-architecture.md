@@ -184,8 +184,49 @@ one-dimensional Nelder-Mead is unreliable. The fit is fine on this fixture,
 but a one-parameter parameterisation should probably route to `"Brent"`, and
 nothing does that today.
 
-Adding a new **estimator**: add a branch in `recm_estimate()` that produces
-`theta`, `V`, and `extras`. The residual function is shared.
+Adding a new **estimator**: the residual function is shared, and the rest is
+a documented contract rather than a registry. Three edits.
+
+1. The name in `recm_estimate()`'s `method` argument.
+2. If it consumes the automatic instruments, add it to `.METHODS_IV`. That
+   gate used to be a bare `method == "gmm"` at the instrument block, which
+   made it an invisible second edit site — a new estimator reached the block,
+   got `Ziv = NULL`, and died inside `apply()` with `dim(X) must have a
+   positive length`.
+3. A branch in the estimator block that sets **all seven** of:
+
+| Name | What |
+|---|---|
+| `th` | `theta` at the optimum |
+| `r` | `resid_full(th)`; carries `$b`, `$lin`, `$e` |
+| `par_all` | `c(th, r$lin)`, the full parameter vector |
+| `V` | covariance, `length(par_all)` square |
+| `fit` | optimiser result; only `$convergence` is read |
+| `extras` | estimator-specific diagnostics, possibly an empty list |
+| `objective` | closure giving the criterion at any `theta` |
+
+This section previously named only `theta`, `V` and `extras`. The other four
+are not optional — the object assembly at the end of `recm_estimate()` reads
+every one of them, so a branch written to the old description produced a
+half-built `recmfit`.
+
+A branch that is declared but not written now hits an explicit `stop()`
+naming the seven fields. That guard is unreachable from user code, because
+`match.arg()` rejects an unknown name first; it exists for the developer
+mid-edit and should not be deleted as dead code.
+
+`extras` is duck-typed on purpose: `print.summary.recmfit()` tests each field
+for `NULL` rather than branching on `method`, so a new estimator can print
+its own diagnostics without touching `methods.R`.
+
+**Why a contract and not a `.COST`-style registry.** The two estimators share
+the residual function and almost nothing else, and the asymmetry is
+structural rather than incidental: GMM must build its instruments *before*
+sample selection, because the longer lags shorten the estimation sample —
+which is upstream of anywhere a plug-in estimator function could run. A
+registry would have to hoist that, and there is no third estimator on the
+roadmap to justify the restructure. Revisit if one lands; R-6
+(Anderson-Rubin) inverts the existing GMM criterion and does not count.
 
 Adding a new **expectations mechanism** (e.g. model-consistent rather than
 VAR): implement an alternative to `.hvec()` returning a `Z_t` series. The

@@ -81,6 +81,29 @@ release was scaffolding only.
 * No behaviour change for `"geometric"` or `"free"`: every frozen value in
   `test-regression.R` is unmoved.
 
+### Estimators
+
+* **The estimator extension point in `docs/01-architecture.md` described
+  three of the seven things a branch must set.** `th`, `V` and `extras` were
+  named; `r`, `par_all`, `fit` and `objective` were not, and the object
+  assembly reads all seven, so a branch written to the documentation
+  produced a half-built `recmfit`. The full contract is now in `docs/01` and
+  in a banner above the estimator block.
+* The dispatch was `if (method == "nls") ... else <gmm>`, so a third
+  estimator declared in the `method` argument but not branched **silently
+  entered the GMM branch** and failed at `dim(X) must have a positive
+  length`, from `apply()` on a NULL instrument matrix. It is now
+  `else if (method == "gmm")` with a terminal `stop()` naming the seven
+  fields. That guard is unreachable from user code — `match.arg()` rejects
+  unknown names first — and exists for the developer mid-edit.
+* The instrument block gated on a bare `method == "gmm"`, an invisible
+  second edit site. It now gates on `.METHODS_IV`.
+* `test-estimators.R` asserts the contract in positive form for every
+  implemented estimator, so a new branch that sets only what the old
+  documentation named fails there rather than returning an object.
+* No behaviour change: both estimators produce byte-identical results, and
+  every frozen value in `test-regression.R` is unmoved.
+
 ### Numerics
 
 * **The Riccati iteration now converges on the feedback gain, not on `P`.**
@@ -146,7 +169,7 @@ Flagged rather than silently reconciled.
 
 ### Testing
 
-* 435 passing expectations, no skips. All eight invariant tests from
+* 476 passing expectations, no skips. All eight invariant tests from
   `docs/04-testing.md` pass, INVARIANT 3 in the restated form above. The
   count is up from 196 largely because `test-cost.R` loops the `.COST`
   registry across several `m` rather than naming each parameterisation.

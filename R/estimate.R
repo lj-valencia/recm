@@ -99,6 +99,38 @@
   )
 )
 
+# ---- estimators ----
+#
+# Extension point (docs/01-architecture.md). Unlike the cost registry above
+# this is a documented contract rather than a lookup table, deliberately:
+# the two estimators share the residual function and little else, and GMM
+# has to build its instruments BEFORE sample selection -- upstream of
+# anywhere a plug-in function could run. See docs/01 for the reasoning.
+#
+# Adding an estimator is three edits:
+#
+#   1. the name in recm_estimate()'s `method` argument
+#   2. if it needs the automatic instruments, add it to .METHODS_IV
+#   3. a branch in the estimator block that sets ALL SEVEN of
+#
+#        th        theta at the optimum
+#        r         resid_full(th); carries $b, $lin, $e
+#        par_all   c(th, r$lin), the full parameter vector
+#        V         covariance, length(par_all) square
+#        fit       optimiser result; only $convergence is read
+#        extras    estimator-specific diagnostics, possibly empty list
+#        objective closure giving the criterion at any theta
+#
+# docs/01 used to name only th, V and extras. Setting the other four is not
+# optional -- the object assembly at the end of recm_estimate() reads every
+# one of them.
+#
+# Estimators whose branch consumes `Ziv`. This gate used to be written as a
+# bare `method == "gmm"` at the instrument block, which made it an invisible
+# second edit site: a new estimator reached that block, got Ziv = NULL, and
+# died inside apply() with "dim(X) must have a positive length".
+.METHODS_IV <- c("gmm")
+
 .k_from_theta <- function(th, m, cost) .cost_spec(cost)$k(th, m)
 
 .theta_names <- function(m, cost) .cost_spec(cost)$names(m)
@@ -388,7 +420,7 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
   # and be dropped wholesale by the finiteness filter below -- a silent
   # loss of every automatic instrument.
   Ziv <- NULL
-  if (method == "gmm") {
+  if (method %in% .METHODS_IV) {
     if (is.null(iv_lag)) iv_lag <- var_lags + 2L
     iv_lag <- as.integer(iv_lag)
     if (is.na(iv_lag) || iv_lag < 1L) {
@@ -558,7 +590,7 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
                   error = function(e) matrix(NA_real_, npar, npar))
     extras <- list()
     objective <- ssr
-  } else {
+  } else if (method == "gmm") {
     n_supplied <- ncol(Ziv)
     Zi <- Ziv[ok, , drop = FALSE]
     # Column 1 is the intercept and is exempt from the variance filter --
@@ -640,6 +672,15 @@ recm_estimate <- function(y, ystar, vars = NULL, beta = 1, data,
                    n_instruments_supplied = n_supplied,
                    iv_lag = iv_lag)
     objective <- function(t2) Q(t2, W2)
+  } else {
+    # Not reachable from user code -- match.arg() above rejects an unknown
+    # name first. This catches the developer who added an estimator to the
+    # `method` argument and not here, which previously fell through to the
+    # GMM branch. Do not delete it as dead code.
+    stop("estimator '", method, "' is accepted by the `method` argument but ",
+         "has no branch in recm_estimate(). It must set th, r, par_all, V, ",
+         "fit, extras and objective -- see the estimator extension point in ",
+         "docs/01-architecture.md.")
   }
 
   names(par_all) <- c(.theta_names(m, cost),
