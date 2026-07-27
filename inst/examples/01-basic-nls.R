@@ -46,7 +46,7 @@ fit_nls <- recm_estimate(
   ystar = "ystar",
   beta = 0.995,
   data = data_example,
-  m = 2,
+  m = 12,
   cost = "geometric",
   var_lags = 2,
   method = "nls",
