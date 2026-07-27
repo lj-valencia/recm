@@ -26,10 +26,12 @@ alpha  (A(L) coefficients, roots outside unit circle)
   |
   +---> .dweights()        -> d_0..d_H scalar leads
   |
-  +---> .hvec(alpha, beta, H_var, sel)               [expectations.R]
-        |
+  +---> zmech$z(alpha, scalars)                      [expectations.R]
+        |     built ONCE, before the optimiser
         v
-      h  (length n_z), so Z_t = h' z_{t-1}
+      Z  (length T), the forward sum. Under .zmech_var() this is
+         h' z_{t-1} with h from .hvec(); the residual function does
+         not know which mechanism produced it.
         |
         v
   residual  e_t = dy_t - [a_0*ecm + sum a_i dy_{t-i} + a_f*Z + delta'W]
@@ -89,10 +91,20 @@ be used for.
 **`expectations.R`** owns the auxiliary VAR and the companion form. This is
 the only module that knows the state vector layout — that the leading element
 is a constant, that variable `j` at lag `l` sits at position `1 + j + l*k`.
-If that layout ever changes, it changes here and nowhere else.
+If that layout ever changes, it changes here and nowhere else. `.var_states()`
+is that layout, split out of `.var_companion()` so a caller holding an
+already-estimated `H` can build states on new observations without
+re-estimating anything.
 
-**`estimate.R`** is the only module that touches `data`. It assembles the
-design, calls the pipeline, and runs the optimiser.
+**`estimate.R`** is the only module that touches `data` at estimation time.
+It assembles the design, calls the pipeline, and runs the optimiser.
+
+**`predict.R`** touches `data` too, and is the one place that is allowed to:
+it rebuilds the same design on new observations. It builds nothing itself —
+the state layout comes from `.var_states()`, the forward sum from
+`.zmech_var()` at the **fitted** `H`, and the specification from
+`recm_estimate()`'s frame via `.fit_env()`. It had its own copy of all three
+and disagreed with `.var_companion()` on the first.
 
 **`methods.R` / `report.R`** are presentation only. They must not recompute
 anything that changes the answer; they may recompute derived quantities
@@ -135,6 +147,14 @@ The two closures are what make delta-method standard errors and
 data by reference, so a `recmfit` object is not portable across sessions
 without the data. That is a deliberate trade; document it, do not "fix" it by
 serialising the design matrices.
+
+The same closures keep `recm_estimate()`'s evaluation frame alive, and
+`recm_boot()` and `predict()` read `data` and the resolved specification back
+out of it through `.fit_env()` rather than from a copy on the object — a copy
+could go stale against the closures, which are what actually gets evaluated.
+Reading it *after* `subset` is the point. `.fit_env()` names what it needs
+and fails loudly when the frame does not have it; both callers used to reach
+in by name having checked only `data`.
 
 ## Extension points
 
@@ -229,7 +249,41 @@ roadmap to justify the restructure. Revisit if one lands; R-6
 (Anderson-Rubin) inverts the existing GMM criterion and does not count.
 
 Adding a new **expectations mechanism** (e.g. model-consistent rather than
-VAR): implement an alternative to `.hvec()` returning a `Z_t` series. The
-residual function should take `Z` as an input rather than building it, once a
-second mechanism exists. Do this refactor when the second mechanism lands, not
-before.
+VAR): one constructor in `expectations.R` returning a mechanism. The residual
+function takes `Z` as an input and no longer builds it, so nothing in
+`estimate.R` needs to change to add one.
+
+A mechanism is three things:
+
+| Field | What |
+|---|---|
+| `name` | `character(1)`, reported by `summary()` |
+| `support` | logical, length `T`. Rows it can supply `Z` for at **any** admissible `alpha` |
+| `z(alpha, s)` | numeric length `T`, or `NULL` if this `alpha` is inadmissible **for this mechanism**. `s` is `.scalars(alpha, beta)`, passed in rather than recomputed |
+
+**`support` must not depend on `theta`.** This is the load-bearing part and
+the reason the seam is a list rather than a bare function. The estimation
+sample is fixed once, before the optimiser runs, so that every trial `theta`
+is scored on the same observations — a criterion compared across moving
+samples is not a criterion. `recm_estimate()` reads `support` into the
+`complete.cases()` that builds `ok`, where the whole `Slag` matrix used to
+sit.
+
+The VAR mechanism satisfies this for free: its `NA` pattern comes from the
+lag structure, not from `alpha`. **Perfect foresight does not**, because its
+horizon follows `rho(G)` — which is why `.zmech_pf()` takes a *fixed*
+horizon and refuses any `alpha` needing more, rather than quietly shortening
+the sum. That trade is the open question in R-4: a fixed horizon buys a
+fixed sample and costs admissible parameter space.
+
+The admissibility condition belongs to the mechanism, not to the residual
+function. The VAR route needs `rho(G) rho(H) < 1` (INVARIANT 8); perfect
+foresight carries no `H` and needs `rho(G) < 1` plus a horizon inside
+budget. The `rho(G) rho(H) >= 1` test used to sit in the residual builder,
+which is why it read as universal when it never was.
+
+Two mechanisms exist. `.zmech_var()` is the production one;
+`.zmech_pf()` is not reachable from `recm_estimate()` yet — there is no
+`expectations_backend` argument, because how the horizon should be chosen is
+undecided. It is exercised through the contract test, which is what keeps
+this seam from being notional.

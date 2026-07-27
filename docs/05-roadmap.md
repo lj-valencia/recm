@@ -77,6 +77,59 @@ under perfect foresight must reproduce the exact quadratic-program solution
 
 **Do this refactor when the second backend lands, not before.**
 
+**Status.** The perfect-foresight mechanism has landed as `.zpf()` in
+`expectations.R`, standalone — nothing in `estimate.R` calls it yet, so the
+refactor above is still to do, but its precondition is now met.
+
+It was not a one-line implementation, for one reason worth knowing before
+the wiring is written: **the sum cannot be collapsed.** The VAR route
+telescopes the infinite forward sum with the Kronecker identity and needs no
+horizon; perfect foresight sums over realised data, so it must truncate, and
+the last `H` observations have no future to sum over. `.zpf()` returns those
+as `NA` rather than padding them.
+
+`H` is not small. At the reference calibration (`.ref_k`, `beta = 0.98`,
+`rho(G) = 0.817`) it is **114** at a relative remainder of `1e-10`, and 223
+for a sluggish `m = 2`, 716 for `m = 3` at `beta = 0.999`. On 178 quarterly
+observations that leaves 64. **Perfect foresight is a cross-check to run on
+long simulated samples, not a backend to offer on typical macro data**, and
+`expectations_backend = "perfect"` should say so when it is exposed.
+
+Verified against three routes that share nothing with it but `.dweights()`:
+a constant target (`Z = c * sum_d`), a geometric target (`Z_t = dys_t *
+sum_i d_i rho^i`, the closed form the DGP fixture uses), and the VAR closure
+itself on a path a VAR(2) forecasts exactly — agreement 1.1e-10, which is
+the truncation tolerance and nothing else. That last one also pins the `t-1`
+dating, the easiest thing to get wrong when the second call site is written.
+
+**The residual-function refactor is done.** `recm_estimate()` builds a
+mechanism once and the residual function consumes its `Z` without knowing
+the provenance; `.zmech_var()` and `.zmech_pf()` both satisfy the contract
+in `docs/01`, and `diagnostics.R` no longer builds `Z` by hand. Behaviour is
+unchanged — every frozen value in `test-regression.R` is unmoved.
+
+**What is left, and the decision blocking it.** Adding
+`expectations_backend = c("var", "perfect")` needs one question answered
+that the refactor deliberately did not answer: **how is the perfect-foresight
+horizon chosen?** It cannot follow `alpha`, because `support` fixes the
+estimation sample before the optimiser runs and a sample that moved with
+theta would have the criterion comparing SSRs over different observations.
+So `.zmech_pf()` takes a fixed horizon and refuses any `alpha` needing more.
+That is correct but it makes the horizon a *tuning parameter with teeth*:
+
+- too short and it silently truncates the admissible parameter space,
+  rejecting sluggish adjustment rather than estimating it;
+- too long and it eats the sample, at 1 observation per period of horizon.
+
+Three options, none obviously right. Fix it from a user-supplied worst-case
+`rho(G)`; derive it from a first-pass VAR fit and hold it; or expose it and
+document the trade. Whichever is chosen, `summary()` must report the horizon
+and the lost observations — this is not a detail a user can be left to
+infer.
+
+Also still open: the certainty-equivalence check against a direct
+quadratic-program solution described above.
+
 ---
 
 ## R-5 — Weak-identification reporting as a first-class output  *(open, medium)*

@@ -104,6 +104,97 @@ release was scaffolding only.
 * No behaviour change: both estimators produce byte-identical results, and
   every frozen value in `test-regression.R` is unmoved.
 
+### Prediction
+
+* **`predict()` method for `recmfit`.** One step ahead and conditional, in
+  differences or in levels, in sample or on `newdata`, with optional
+  confidence and prediction intervals. On the estimation sample at the
+  fitted parameters it reproduces `fitted()` exactly.
+* **The auxiliary VAR is not re-estimated on `newdata`.** The forward sum
+  applies the *fitted* `H` to states built from the new observations.
+  Refitting it there would be predicting from a second, differently fitted
+  model.
+* It reached the forward sum by hand — `.hvec()`, lag the states, multiply —
+  which was the third copy of that construction in the package and bypassed
+  the mechanism seam. It now goes through `.zmech_var()`, which gained a
+  `states` argument for exactly this: fitted `H`, new states.
+* It also wrote out the **state vector layout**, which `docs/01` reserves to
+  `expectations.R`, and disagreed with `.var_companion()` about it: it filled
+  rows the lag history does not reach and never blanked the first `p - 1`.
+  The loop is now `.var_states()`, called by both, and a test asserts they
+  agree at every lag order from 1 to 4.
+* The growth column was recovered from `object$call$growth`, an
+  **unevaluated** expression, so `growth = gcol` with `gcol <- "trend"` sent
+  it looking for a column named `gcol`. `recm_estimate()` now stores
+  `growth_name`, and a missing growth column is an error rather than a
+  silently uncorrected path.
+* Bootstrap prediction intervals were formed by adding `rnorm()` draws, so
+  two identical calls returned different numbers. The residual variance is
+  now added in quadrature. `sd(residuals)` became
+  `sum(e^2)/(n - k)`: the residuals of a concentrated least-squares fit with
+  no intercept are not required to have mean zero.
+* `.fit_env()` replaces the reach into `environment(object$objective)` that
+  `recm_boot()` and `predict()` were each doing. It names what it needs and
+  fails loudly; the old form checked `data` and took the rest on trust.
+
+### Expectations
+
+* **The residual function no longer builds `Z`; it takes one.** A mechanism
+  is built once in `recm_estimate()`, before the optimiser, and supplies the
+  forward sum. This is the refactor `docs/01` and roadmap R-4 had deferred
+  until a second mechanism existed. Behaviour is unchanged: every frozen
+  value in `test-regression.R` is unmoved.
+* A mechanism is `name`, `support` and `z(alpha, s)`. **`support` — the rows
+  it can supply `Z` for at any admissible `alpha` — must not depend on
+  `theta`**, because it is what fixes the estimation sample before the
+  optimiser runs. It replaces the `Slag` matrix in the `complete.cases()`
+  that builds `ok`, which was the VAR mechanism's answer to that question
+  written out at the call site.
+* The `rho(G) rho(H) >= 1` admissibility test moved out of the residual
+  builder and into `.zmech_var()`, where it belongs: it is INVARIANT 8 for
+  the VAR closure specifically, and perfect foresight carries no `H`. It
+  read as universal in the old position when it never was.
+* `.zmech_pf()` takes a **fixed** horizon and refuses any `alpha` needing
+  more, rather than shortening the sum. A horizon that followed `alpha`
+  would move the sample with `theta`.
+* `recm_boot()` no longer builds `Z` by hand. It had its own copy of the
+  `.hvec()`-then-lag-the-states construction, which would have drifted from
+  the one in `estimate.R`.
+* Not yet exposed: there is still no `expectations_backend` argument.
+  Choosing the perfect-foresight horizon is a real trade — too short
+  truncates the admissible parameter space, too long eats the sample — and
+  R-4 now records the options rather than a silent default.
+
+* **A second expectations mechanism, `.zpf()`, perfect foresight** — the
+  forward sum taken over the realised `d(ystar)` path rather than over VAR
+  forecasts. Internal and standalone: nothing in `recm_estimate()` calls it,
+  and there is no `expectations_backend` argument yet. This is the
+  precondition roadmap R-4 was waiting on, not R-4 itself.
+* R-4 describes it as a one-line implementation. It is not, and the reason
+  matters for the refactor still to come: the VAR route telescopes the
+  infinite sum with the Kronecker identity and never truncates, while
+  perfect foresight sums over data and must. The last `H` observations have
+  no future left and are returned as `NA` rather than padded with a final
+  value or a forecast — padding would substitute a fabricated continuation
+  for the foresight the mechanism claims to have.
+* `H` is large enough to shape how the mechanism can be used: **114** at the
+  reference calibration for a relative remainder of `1e-10`, 223 for a
+  sluggish `m = 2`, 716 for `m = 3` at `beta = 0.999`. On 178 quarterly
+  observations that leaves 64. Perfect foresight is a cross-check for long
+  simulated samples, not a backend for typical macro data.
+* The horizon is chosen against the **closed-form** `sum_i d_i` from
+  `.scalars()`, so the truncation remainder is exact rather than inferred
+  from the last retained term — which matters because `d_i` oscillates in
+  sign under complex roots. A tolerance below machine epsilon is refused:
+  once the terms underflow relative to the running total the measured
+  remainder is exactly `0`, which would otherwise certify any tolerance at
+  all on rounding alone.
+* Checked against three routes sharing nothing with it but `.dweights()`: a
+  constant target, a geometric target against the closed form the DGP
+  fixture uses, and the VAR closure itself on a path a VAR(2) forecasts
+  exactly. The last agrees to 1.1e-10, which is the truncation tolerance and
+  nothing else, and pins the `t-1` dating convention.
+
 ### Numerics
 
 * **The Riccati iteration now converges on the feedback gain, not on `P`.**
@@ -169,7 +260,7 @@ Flagged rather than silently reconciled.
 
 ### Testing
 
-* 476 passing expectations, no skips. All eight invariant tests from
+* 496 passing expectations, no skips. All eight invariant tests from
   `docs/04-testing.md` pass, INVARIANT 3 in the restated form above. The
   count is up from 196 largely because `test-cost.R` loops the `.COST`
   registry across several `m` rather than naming each parameterisation.

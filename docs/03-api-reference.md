@@ -68,13 +68,21 @@ when `y` and `ystar` are nominal. A warning fires on the default path unless
 
 Object of class `recmfit`. Fields: `theta`, `par`, `vcov`, `alpha`, `a`, `k`,
 `scalars`, `a_f`, `delta`, `residuals`, `fitted`, `dep`, `index`, `n`, `npar`,
-`var`, `extras`, `converged`, plus two closures:
+`var`, `extras`, `converged`, the column names `y`, `ystar`, `vars_names` and
+`growth_name`, plus two closures:
 
 - `alpha_fn(theta)` — any `theta` to `alpha`; powers delta-method SEs
 - `objective(theta)` — the criterion; powers `recm_profile()`
 
 **The closures capture `data` by reference.** A `recmfit` is not portable
 across sessions without its data. Deliberate.
+
+`objective`'s environment is `recm_estimate()`'s own evaluation frame, and
+that is where `recm_boot()` and `predict()` read `data` and the resolved
+specification from, through `.fit_env()`. `growth_name` is stored on the
+object rather than read back off `object$call`, which holds an *unevaluated*
+expression — `growth = gcol` with `gcol <- "trend"` would otherwise send
+`predict()` looking for a column named `gcol`.
 
 ---
 
@@ -105,6 +113,53 @@ equation(object, digits = 4, format = c("both","explicit","compressed"),
 Writes the fitted equation with coefficients substituted, in either or both
 formats. Returns `list(a, a_f, d, f)` invisibly. `max_lags` truncates the
 printed lag list; the count of suppressed lags is shown.
+
+---
+
+## `predict()`
+
+```r
+predict(object, newdata = NULL,
+        interval = c("none", "confidence", "prediction"),
+        level = 0.95, type = c("diff", "level"),
+        boot_object = NULL, quiet = FALSE, ...)
+```
+
+One-step-ahead predictions from a fitted `recmfit`, following
+`predict.lm()` conventions.
+
+- `newdata`: optional `data.frame`, ordered in time and with no gaps,
+  carrying the `y`, `ystar`, `vars`, `expectations` and `growth` columns
+  under the names the fit used. `NULL` predicts on the estimation data,
+  after any `subset`.
+- `type`: `"diff"` (predicts \eqn{\Delta y_t}) or `"level"` (predicts
+  \eqn{y_t = y_{t-1} + \Delta y_t}).
+- `interval`: `"none"` returns a numeric vector; the others return a data
+  frame with `fit`, `se.fit`, `lwr`, `upr`.
+- `boot_object`: optional `recm_boot` object. Supplying one propagates the
+  auxiliary VAR's estimation error; without it the interval conditions on
+  the VAR and is too narrow, and the method says so unless `quiet = TRUE`.
+
+**Prediction is conditional, not a simulation.** Every right-hand-side
+quantity is read from the data supplied, never from the model's own earlier
+predictions, so `"level"` is \eqn{y_{t-1}} plus the predicted difference. On
+the estimation sample at the fitted parameters this reproduces
+`fitted(object)` exactly. Rows line up with rows of the input; rows the lag
+structure cannot reach are `NA`.
+
+**The auxiliary VAR is not re-estimated on `newdata`.** The forward sum uses
+the fitted `H` applied to states built from the new observations. Refitting
+it would predict from a different model than the one that was fitted.
+
+Interval construction differs by route, deliberately. Without a
+`boot_object`, `se.fit` is the delta method on the numerical Jacobian of the
+prediction, sandwiched with `vcov()`. With one, `se.fit` is the standard
+deviation across replicates and `"confidence"` is their **percentile**
+interval — not required to be symmetric about `fit`, and not required to
+contain it if the bootstrap distribution is biased. `"prediction"` adds
+\eqn{\hat\sigma^2 = \sum e_t^2/(n-k)} in quadrature and takes a normal
+critical value on both routes; it is not formed by drawing residual noise,
+which would make repeated calls on one fit return different numbers.
 
 ---
 
