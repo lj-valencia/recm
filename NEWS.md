@@ -104,6 +104,39 @@ release was scaffolding only.
 * No behaviour change: both estimators produce byte-identical results, and
   every frozen value in `test-regression.R` is unmoved.
 
+### Prediction
+
+* **`predict()` method for `recmfit`.** One step ahead and conditional, in
+  differences or in levels, in sample or on `newdata`, with optional
+  confidence and prediction intervals. On the estimation sample at the
+  fitted parameters it reproduces `fitted()` exactly.
+* **The auxiliary VAR is not re-estimated on `newdata`.** The forward sum
+  applies the *fitted* `H` to states built from the new observations.
+  Refitting it there would be predicting from a second, differently fitted
+  model.
+* It reached the forward sum by hand — `.hvec()`, lag the states, multiply —
+  which was the third copy of that construction in the package and bypassed
+  the mechanism seam. It now goes through `.zmech_var()`, which gained a
+  `states` argument for exactly this: fitted `H`, new states.
+* It also wrote out the **state vector layout**, which `docs/01` reserves to
+  `expectations.R`, and disagreed with `.var_companion()` about it: it filled
+  rows the lag history does not reach and never blanked the first `p - 1`.
+  The loop is now `.var_states()`, called by both, and a test asserts they
+  agree at every lag order from 1 to 4.
+* The growth column was recovered from `object$call$growth`, an
+  **unevaluated** expression, so `growth = gcol` with `gcol <- "trend"` sent
+  it looking for a column named `gcol`. `recm_estimate()` now stores
+  `growth_name`, and a missing growth column is an error rather than a
+  silently uncorrected path.
+* Bootstrap prediction intervals were formed by adding `rnorm()` draws, so
+  two identical calls returned different numbers. The residual variance is
+  now added in quadrature. `sd(residuals)` became
+  `sum(e^2)/(n - k)`: the residuals of a concentrated least-squares fit with
+  no intercept are not required to have mean zero.
+* `.fit_env()` replaces the reach into `environment(object$objective)` that
+  `recm_boot()` and `predict()` were each doing. It names what it needs and
+  fails loudly; the old form checked `data` and took the rest on trust.
+
 ### Expectations
 
 * **The residual function no longer builds `Z`; it takes one.** A mechanism

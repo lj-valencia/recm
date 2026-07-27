@@ -249,8 +249,9 @@ predict.recmfit <- function(object, newdata = NULL,
   if (!inherits(object, "recmfit")) stop("`object` must be a `recmfit`")
   interval <- match.arg(interval)
   type <- match.arg(type)
-  if (!is.numeric(level) || length(level) != 1L || !is.finite(level) ||
-      level <= 0 || level >= 1) {
+  ok_level <- is.numeric(level) && length(level) == 1L &&
+    is.finite(level) && level > 0 && level < 1
+  if (!ok_level) {
     stop("`level` must be a single number strictly between 0 and 1")
   }
 

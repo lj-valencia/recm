@@ -133,8 +133,8 @@ default was taken.}
 \value{
 An object of class \code{recmfit}, a list with \code{theta}, \code{par}, \code{vcov},
 \code{alpha}, \code{a}, \code{k}, \code{scalars}, \code{a_f}, \code{delta}, \code{residuals}, \code{fitted},
-\code{dep}, \code{index}, \code{n}, \code{npar}, \code{var}, \code{extras} and \code{converged}, plus two
-closures:
+\code{dep}, \code{index}, \code{n}, \code{npar}, \code{var}, \code{extras}, \code{converged}, the column
+names \code{y}, \code{ystar}, \code{vars_names} and \code{growth_name}, plus two closures:
 
 \describe{
 \item{\code{alpha_fn(theta)}}{maps any \code{theta} to \code{alpha}; powers

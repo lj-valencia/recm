@@ -45,6 +45,39 @@ test_that("the state vector layout is 1, X_t, X_{t-1}, ...", {
   }
 })
 
+test_that(".var_states builds the same states .var_companion does", {
+  # The layout loop was split out of .var_companion() so a caller holding an
+  # already-estimated H can build states on new observations. Splitting it is
+  # only safe while the two agree exactly at every lag order.
+  set.seed(406)
+  X <- cbind(dystar = rnorm(120), income = rnorm(120))
+  for (p in 1:4) {
+    expect_equal(.var_states(X, p), .var_companion(X, p)$states)
+  }
+  # Fewer observations than lags is a specification error, not a boundary
+  # for the optimiser to reject: p:Tn would run backwards and fill garbage.
+  expect_error(.var_states(X[1:3, , drop = FALSE], 4L), "lag order")
+})
+
+test_that("a mechanism can run the fitted H over different states", {
+  set.seed(407)
+  X <- cbind(dystar = rnorm(200))
+  vc <- .var_companion(X[1:120, , drop = FALSE], p = 2)
+  Xnew <- X[121:200, , drop = FALSE]
+  Snew <- .var_states(Xnew, vc$p)
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  s <- .scalars(alpha, .ref_beta)
+
+  zm <- .zmech_var(vc, .ref_beta, states = Snew)
+  Slag <- rbind(NA, Snew[-nrow(Snew), , drop = FALSE])
+  expect_equal(zm$z(alpha, s),
+               drop(Slag %*% .hvec(alpha, .ref_beta, vc$H, 2L)))
+  # support follows the states supplied, not the ones vc was fitted on.
+  expect_equal(zm$support, stats::complete.cases(Slag))
+  expect_error(.zmech_var(vc, .ref_beta, states = Snew[, 1:2, drop = FALSE]),
+               "columns but H is")
+})
+
 test_that("d(ystar) sits at position 2 of the state, as sel = 2L assumes", {
   set.seed(408)
   X <- cbind(dystar = rnorm(120), income = rnorm(120))

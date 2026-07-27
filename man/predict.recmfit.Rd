@@ -2,7 +2,7 @@
 % Please edit documentation in R/predict.R
 \name{predict.recmfit}
 \alias{predict.recmfit}
-\title{Predict method for Rational Error Correction Models}
+\title{Predict method for rational error correction models}
 \usage{
 \method{predict}{recmfit}(
   object,
@@ -18,40 +18,90 @@
 \arguments{
 \item{object}{an object of class \code{recmfit}.}
 
-\item{newdata}{optional \code{data.frame} containing new or out-of-sample
-observations. Must contain columns for the decision variable \code{y},
-frictionless target \code{ystar}, and any extra linear regressors (\code{vars}) or
-expectations variables specified during estimation. If \code{NULL} (default),
-predictions are made on the sample data used for estimation.}
+\item{newdata}{optional \code{data.frame} of new observations, ordered in time
+and with no gaps. It must carry the decision variable, the frictionless
+target, and any \code{vars}, \code{expectations} and \code{growth} columns the fit was
+estimated with, under the same names. \code{NULL} (default) predicts on the
+data the fit was estimated on, after any \code{subset}.}
 
-\item{interval}{type of interval calculation: \code{"none"} (default),
-\code{"confidence"}, or \code{"prediction"}.}
+\item{interval}{\code{"none"} (default), \code{"confidence"} or \code{"prediction"}.}
 
-\item{level}{numeric(1) confidence level for intervals (default \code{0.95}).}
+\item{level}{numeric(1) in (0, 1), the interval's coverage.}
 
-\item{type}{one of \code{"diff"} (default) or \code{"level"}. \code{"diff"} predicts
-first differences \eqn{\Delta y_t}, whereas \code{"level"} predicts levels
-\eqn{y_t = y_{t-1} + \Delta y_t}.}
+\item{type}{\code{"diff"} (default) predicts \eqn{\Delta y_t}; \code{"level"}
+predicts \eqn{y_t = y_{t-1} + \Delta y_t}, taking \eqn{y_{t-1}} from the
+data rather than from the previous prediction.}
 
-\item{boot_object}{optional object of class \code{recm_boot} returned by
-\code{\link[=recm_boot]{recm_boot()}}. If provided, standard errors and confidence/prediction
-intervals are computed across bootstrap replicates, propagating VAR
-estimation error. If \code{NULL} and \code{interval != "none"}, delta-method
-standard errors are used.}
+\item{boot_object}{optional object of class \code{recm_boot}. Supplying one
+propagates the auxiliary VAR's estimation error into the interval;
+without it the interval conditions on the VAR and is too narrow. See
+the Standard errors section.}
 
-\item{quiet}{logical; if \code{TRUE}, suppress warnings/caveats regarding
-conditional standard errors when \code{boot_object} is \code{NULL}.}
+\item{quiet}{logical; suppress the conditional-standard-error warning
+raised when an interval is requested without a \code{boot_object}.}
 
-\item{...}{further arguments passed to or from other methods.}
+\item{...}{ignored, for consistency with the generic.}
 }
 \value{
-If \code{interval = "none"}, a numeric vector of predictions.
-Otherwise, a data frame with columns \code{fit}, \code{se.fit}, \code{lwr}, and \code{upr}.
+With \code{interval = "none"}, a numeric vector of length
+\code{nrow(newdata)} (or of the fitted data). Otherwise a data frame with
+columns \code{fit}, \code{se.fit}, \code{lwr} and \code{upr}, one row per observation.
+
+Observations the model cannot be evaluated at are \code{NA}: the leading
+rows consumed by the differencing, the error-correction lag, the \code{m - 1}
+lags of \eqn{\Delta y} and the auxiliary VAR's lag structure. Rows of
+the output line up with rows of the input throughout, so no realignment
+is needed; \code{object$index} gives the rows that were estimated on.
 }
 \description{
-Obtains predictions and optional confidence or prediction intervals from a
-fitted \code{recmfit} object, matching standard \code{\link[stats:predict]{stats::predict()}} conventions.
+One-step-ahead predictions from a fitted \code{recmfit}, with optional
+confidence or prediction intervals, following \code{\link[stats:predict.lm]{stats::predict.lm()}}
+conventions.
 }
+\details{
+Prediction is one step ahead and conditional. Every right-hand-side
+quantity is read from the data supplied, never from the model's own
+earlier predictions, so \code{type = "level"} is \eqn{y_{t-1}} plus the
+predicted difference and not a simulated path. On the estimation sample
+and at the fitted parameters this reproduces \code{fitted(object)} exactly.
+
+The auxiliary VAR is \strong{not} re-estimated on \code{newdata}. The forward sum
+uses the fitted \code{H} applied to states built from the new observations,
+which is what makes an out-of-sample prediction a prediction from the
+fitted model rather than from a second, differently fitted one.
+}
+\section{Intervals}{
+
+Both interval types cover the fitted decision rule only. Neither covers
+error in \code{ystar}, which is normally itself an estimate -- see roadmap
+item R-1.
+
+Without a \code{boot_object} the standard error is the delta method applied to
+the numerical Jacobian of the prediction with respect to the full
+parameter vector, sandwiched with \code{vcov(object)}.
+
+With one, the parameter uncertainty comes from the bootstrap replicates:
+\code{se.fit} is their standard deviation, and a \code{"confidence"} interval is
+their percentile interval, so it is not required to be symmetric about
+\code{fit} and need not contain it if the bootstrap distribution is biased.
+
+A \code{"prediction"} interval adds the residual variance
+\eqn{\hat\sigma^2 = \sum e_t^2 / (n - k)} in quadrature and uses a normal
+critical value on both routes. It is deliberately not formed by simulating
+residual draws: that would make repeated calls on one fit return different
+numbers.
+}
+
+\section{Standard errors}{
+
+\code{Z_t} is a generated regressor. It depends on the estimated auxiliary VAR
+\emph{and} on \code{ystar}, which usually comes from a first-stage cointegrating
+regression. In Monte Carlo the conditional standard errors came in at
+roughly half the true sampling standard deviation for the PAC parameters.
+Intervals computed without a \code{boot_object} inherit that: they are too
+narrow, and the method says so unless \code{quiet = TRUE}.
+}
+
 \examples{
 set.seed(1)
 n <- 160
@@ -62,13 +112,12 @@ dat$y <- dat$ystar - 0.05 + cumsum(rnorm(n, 0, 0.002))
 fit <- recm_estimate("y", "ystar", beta = 0.995, data = dat, m = 2,
                      var_lags = 2, restarts = 1, quiet = TRUE)
 
-# In-sample prediction of first differences
-preds_diff <- predict(fit, type = "diff")
-head(preds_diff)
+# In-sample, in differences: equals fitted() on the estimated rows.
+pr <- predict(fit)
+all.equal(pr[fit$index], fitted(fit))
 
-# Out-of-sample prediction with confidence intervals
-preds_ci <- predict(fit, interval = "confidence", quiet = TRUE)
-head(preds_ci)
+# In levels, with a conditional confidence interval.
+head(predict(fit, type = "level", interval = "confidence", quiet = TRUE))
 
 }
 \seealso{
