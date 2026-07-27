@@ -4,7 +4,7 @@
 \name{recm-package}
 \alias{recm}
 \alias{recm-package}
-\title{recm: Rational Error Correction Models}
+\title{recm: Rational Error Correction Model}
 \description{
 Estimation of polynomial adjustment cost (PAC) equations under a rational error correction (REC) framework, the forward-looking error-correction specification used in the Federal Reserve Board's FRB/US model and the Bank of Canada's LENS model. Given a decision variable, a frictionless target and a calibrated discount factor, the package recovers the adjustment cost parameters and reports the implied decision rule in both the explicit and the compressed (LENS-style) formats. Because the criterion is routinely near-flat, profile and bootstrap diagnostics are treated as part of the standard output rather than as optional extras.
 }
@@ -47,7 +47,7 @@ standard deviation. \code{\link[=recm_boot]{recm_boot()}} is the fix.
 implements.
 }
 \author{
-\strong{Maintainer}: LJ Valencia \email{lebjenri@gmail.com}
+\strong{Maintainer}: LJ Valencia \email{leb_valencia@yahoo.com}
 
 }
 \keyword{internal}
