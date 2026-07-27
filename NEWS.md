@@ -104,6 +104,38 @@ release was scaffolding only.
 * No behaviour change: both estimators produce byte-identical results, and
   every frozen value in `test-regression.R` is unmoved.
 
+### Expectations
+
+* **A second expectations mechanism, `.zpf()`, perfect foresight** — the
+  forward sum taken over the realised `d(ystar)` path rather than over VAR
+  forecasts. Internal and standalone: nothing in `recm_estimate()` calls it,
+  and there is no `expectations_backend` argument yet. This is the
+  precondition roadmap R-4 was waiting on, not R-4 itself.
+* R-4 describes it as a one-line implementation. It is not, and the reason
+  matters for the refactor still to come: the VAR route telescopes the
+  infinite sum with the Kronecker identity and never truncates, while
+  perfect foresight sums over data and must. The last `H` observations have
+  no future left and are returned as `NA` rather than padded with a final
+  value or a forecast — padding would substitute a fabricated continuation
+  for the foresight the mechanism claims to have.
+* `H` is large enough to shape how the mechanism can be used: **114** at the
+  reference calibration for a relative remainder of `1e-10`, 223 for a
+  sluggish `m = 2`, 716 for `m = 3` at `beta = 0.999`. On 178 quarterly
+  observations that leaves 64. Perfect foresight is a cross-check for long
+  simulated samples, not a backend for typical macro data.
+* The horizon is chosen against the **closed-form** `sum_i d_i` from
+  `.scalars()`, so the truncation remainder is exact rather than inferred
+  from the last retained term — which matters because `d_i` oscillates in
+  sign under complex roots. A tolerance below machine epsilon is refused:
+  once the terms underflow relative to the running total the measured
+  remainder is exactly `0`, which would otherwise certify any tolerance at
+  all on rounding alone.
+* Checked against three routes sharing nothing with it but `.dweights()`: a
+  constant target, a geometric target against the closed form the DGP
+  fixture uses, and the VAR closure itself on a path a VAR(2) forecasts
+  exactly. The last agrees to 1.1e-10, which is the truncation tolerance and
+  nothing else, and pins the `t-1` dating convention.
+
 ### Numerics
 
 * **The Riccati iteration now converges on the feedback gain, not on `P`.**
@@ -169,7 +201,7 @@ Flagged rather than silently reconciled.
 
 ### Testing
 
-* 476 passing expectations, no skips. All eight invariant tests from
+* 496 passing expectations, no skips. All eight invariant tests from
   `docs/04-testing.md` pass, INVARIANT 3 in the restated form above. The
   count is up from 196 largely because `test-cost.R` loops the `.COST`
   registry across several `m` rather than naming each parameterisation.

@@ -233,3 +233,14 @@ VAR): implement an alternative to `.hvec()` returning a `Z_t` series. The
 residual function should take `Z` as an input rather than building it, once a
 second mechanism exists. Do this refactor when the second mechanism lands, not
 before.
+
+A second mechanism has now partly landed — `.zpf()`, perfect foresight,
+standalone and not yet wired into `estimate.R` (roadmap R-4). The refactor
+is therefore unblocked but not done. One property of it constrains the seam,
+so decide it before writing the wiring rather than after: **a mechanism may
+not be able to supply `Z` for every period.** The VAR route collapses the
+forward sum in closed form and returns a `Z` for every row it has states
+for; perfect foresight must truncate, and its last `H` rows are `NA` — 114
+of them at the reference calibration. So the seam is a `Z` series with
+missings, not a `Z` series, and whatever consumes it has to lose those rows
+through `complete.cases()` rather than assume they are there.

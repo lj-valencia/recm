@@ -1,6 +1,7 @@
-# Owns the auxiliary VAR and the companion form. This is the ONLY module
-# that knows the state vector layout. If that layout ever changes, it
-# changes here and nowhere else. See docs/01-architecture.md.
+# Owns the expectations mechanisms, of which the auxiliary VAR is the
+# first. This is the ONLY module that knows the state vector layout. If
+# that layout ever changes, it changes here and nowhere else -- see
+# docs/01-architecture.md, "Module boundaries".
 #
 # State vector, fixed by .var_companion():
 #
@@ -107,4 +108,88 @@
                    kronecker(matrix(s$im, ncol = 1), Hm)))
   if (any(!is.finite(out))) return(NULL)
   out
+}
+
+
+# ---- perfect-foresight forward sum ----
+
+# Relative tail mass at which the perfect-foresight sum is truncated, and
+# the horizon beyond which we give up looking for that tolerance. The tail
+# is measured against the CLOSED-FORM total sum_i d_i from .scalars(), so
+# this is an exact remainder rather than a guess at one.
+.TOL_ZPF <- 1e-10
+.MAX_H_ZPF <- 5000L
+
+# Tightest tolerance the remainder can actually be held to. It is measured
+# as a difference of accumulated sums, so once the terms underflow relative
+# to the total the measured remainder is exactly 0 -- which would certify
+# ANY tolerance, however small, on nothing but rounding. Asking for one
+# below this is refused rather than granted for free.
+.EPS_ZPF <- .Machine$double.eps
+
+# Horizon H at which sum_{i>H} d_i has fallen below `tol` of sum_i d_i.
+#
+# NULL when the sum does not converge (rho(G) >= 1) or when `max_h` terms
+# are not enough to reach `tol`. Both are refusals, not approximations: a
+# caller that got a horizon back can rely on the truncation being below
+# tolerance, which is the whole point of returning one.
+.zpf_horizon <- function(alpha, beta, tol = .TOL_ZPF, max_h = .MAX_H_ZPF) {
+  if (!is.finite(tol) || tol < .EPS_ZPF) return(NULL)
+  s <- .scalars(alpha, beta)
+  if (is.null(s)) return(NULL)
+  if (!is.finite(s$rhoG) || s$rhoG >= .TOL_SPECTRAL) return(NULL)
+  if (!is.finite(s$sum_d) || abs(s$sum_d) < .Machine$double.eps) return(NULL)
+  dw <- .dweights(alpha, beta, horizon = max_h)
+  if (is.null(dw)) return(NULL)
+  # cumsum(d)[j] is sum_{i=0}^{j-1} d_i, so truncating after H = j-1 leaves
+  # sum_d - cumsum(d)[j]. d_i oscillates in sign under complex roots, so
+  # the remainder is taken directly rather than inferred from |d_H|.
+  tail_rel <- abs(s$sum_d - cumsum(dw$d)) / abs(s$sum_d)
+  hit <- which(is.finite(tail_rel) & tail_rel <= tol)
+  if (!length(hit)) return(NULL)
+  hit[1L] - 1L
+}
+
+# Perfect-foresight expectations: the second mechanism (roadmap R-4).
+#
+#   Z_t = sum_{i>=0} d_i D ystar_{t+i}
+#
+# which is the VAR closure of docs/02 section 6 with E_{t-1}[.] replaced by
+# the REALISED path. Certainty equivalence is what makes this worth having:
+# the analytic decision rule evaluated at this Z must reproduce the exact
+# quadratic-program solution, so it cross-checks the whole
+# alpha -> d_i -> Z chain against a route that shares none of it.
+#
+# Two ways it differs from .hvec(), both consequences of summing over
+# realised data rather than over a companion form:
+#
+#   * No Kronecker collapse is available, so the sum is TRUNCATED. The
+#     horizon comes from .zpf_horizon() and its remainder is bounded.
+#   * The last H observations have no future left to sum over and are
+#     returned as NA. They are not padded with the final value or with a
+#     forecast -- padding would substitute a fabricated continuation for
+#     the perfect foresight this mechanism claims, and NA lets the caller's
+#     complete.cases() drop them, which is the honest cost.
+#
+# Convergence requires rho(G) < 1. That is INVARIANT 8 specialised to a
+# mechanism carrying no H, and it is the same condition in practice, since
+# rho(H) is always exactly 1 through the constant block.
+#
+# `dys` is the realised D ystar series, one element per period, aligned
+# with the rows of `data` in estimate.R. Its own leading NA propagates.
+.zpf <- function(alpha, beta, dys, tol = .TOL_ZPF) {
+  hh <- .zpf_horizon(alpha, beta, tol)
+  if (is.null(hh)) return(NULL)
+  dw <- .dweights(alpha, beta, horizon = hh)
+  if (is.null(dw)) return(NULL)
+  dd <- dw$d
+  Tn <- length(dys)
+  Z <- rep(NA_real_, Tn)
+  # The obvious loop, kept obvious. It runs once per candidate alpha, not
+  # once per observation per candidate, and a filter-based route would need
+  # its own agreement test to earn the speed.
+  if (Tn > hh) {
+    for (tt in seq_len(Tn - hh)) Z[tt] <- sum(dd * dys[tt + 0:hh])
+  }
+  list(Z = Z, horizon = hh, n_lost = min(hh, Tn))
 }

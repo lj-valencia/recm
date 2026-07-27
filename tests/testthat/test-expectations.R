@@ -74,3 +74,108 @@ test_that("the forward sum refuses to diverge", {       # INVARIANT 8
   expect_gt(.scalars(bad, 1)$rhoG, 1)
   expect_null(.hvec(bad, 1, H, sel = 2L))
 })
+
+
+# ---- perfect foresight (roadmap R-4, second mechanism) ----
+#
+# .zpf() sums realised d(ystar) forward instead of VAR forecasts. It shares
+# .dweights() with the VAR route and nothing else, so the checks below pin
+# it against three routes that do not overlap with it: two closed forms and
+# the VAR closure itself.
+
+test_that("perfect foresight on a constant target is sum_d times it", {
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  s <- .scalars(alpha, .ref_beta)
+  z <- .zpf(alpha, .ref_beta, rep(0.01, 500))
+
+  ok <- seq_len(500 - z$horizon)
+  expect_equal(z$Z[ok], rep(0.01 * s$sum_d, length(ok)))
+})
+
+test_that("perfect foresight on a geometric target matches its closed form", {
+  # dys_t = rho^t makes sum_i d_i dys_{t+i} = dys_t * sum_i d_i rho^i, and
+  # the latter is available in closed form as
+  # A(1)A(beta) iota'(I-G)^{-1}(I - rho G)^{-1} iota -- the same identity
+  # the DGP fixture uses to avoid a truncated forward sum.
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  rho <- 0.5
+  S1 <- .dgp_S(alpha, .ref_beta, rho)
+
+  dys <- rho^(0:499)
+  z <- .zpf(alpha, .ref_beta, dys)
+  ok <- seq_len(500 - z$horizon)
+  expect_equal(z$Z[ok], dys[ok] * S1)
+})
+
+test_that("perfect foresight equals the VAR route on a predictable path", {
+  # The cross-mechanism check, and the one that pins the t-1 dating. On a
+  # path the VAR forecasts EXACTLY, E_{t-1}[dystar_{t+i}] is the realised
+  # value, so the two mechanisms must agree. mu + A cos(w t) satisfies
+  # x_t = c + 2cos(w) x_{t-1} - x_{t-2}, which a VAR(2) with an intercept
+  # recovers exactly.
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  Tn <- 900
+  w <- 2 * pi / 11
+  dys <- 0.0104 + 0.004 * cos(w * seq_len(Tn))
+
+  vc <- .var_companion(cbind(d.ystar = dys), p = 2)
+  expect_lt(max(abs(vc$resid)), 1e-12)          # the VAR really is exact
+
+  Slag <- rbind(NA, vc$states[-Tn, , drop = FALSE])
+  Zvar <- drop(Slag %*% .hvec(alpha, .ref_beta, vc$H, sel = 2L))
+  z <- .zpf(alpha, .ref_beta, dys)
+
+  ok <- which(is.finite(Zvar) & is.finite(z$Z))
+  expect_gt(length(ok), 700)
+  # 1e-9, not machine precision: the VAR route collapses the sum in closed
+  # form while .zpf() truncates it at .TOL_ZPF = 1e-10 relative. The gap
+  # measured here is 1.1e-10, i.e. the truncation and nothing else.
+  expect_lt(max(abs(Zvar[ok] - z$Z[ok]) / abs(Zvar[ok])), 1e-9)
+})
+
+test_that("the truncated tail is returned as NA, not padded", {
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  z <- .zpf(alpha, .ref_beta, rep(0.01, 500))
+
+  expect_equal(sum(is.na(z$Z)), z$horizon)
+  expect_equal(z$n_lost, z$horizon)
+  expect_true(all(is.na(utils::tail(z$Z, z$horizon))))
+  expect_false(any(is.na(utils::head(z$Z, 500 - z$horizon))))
+  # A series with no future at all yields all NA rather than a short sum.
+  expect_true(all(is.na(.zpf(alpha, .ref_beta, rep(0.01, 20))$Z)))
+})
+
+test_that("perfect foresight refuses rather than truncating blind", {
+  # rho(G) >= 1: the forward sum does not converge.       [INVARIANT 8]
+  bad <- c(0, -1.5)
+  expect_gt(.scalars(bad, 1)$rhoG, 1)
+  expect_null(.zpf_horizon(bad, 1))
+  expect_null(.zpf(bad, 1, rep(0.01, 500)))
+
+  # Convergent, but not to tolerance within the terms allowed. Returning a
+  # horizon would claim a bounded remainder that has not been established.
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  expect_null(.zpf_horizon(alpha, .ref_beta, tol = 1e-12, max_h = 5L))
+
+  # A tolerance below machine epsilon is refused, not granted. Once the
+  # terms underflow relative to the running total the measured remainder is
+  # exactly 0, which would certify any tolerance at all on rounding alone.
+  expect_null(.zpf(alpha, .ref_beta, rep(0.01, 500), tol = 1e-300))
+  expect_null(.zpf_horizon(alpha, .ref_beta, tol = 0))
+  expect_false(is.null(.zpf_horizon(alpha, .ref_beta, tol = .EPS_ZPF)))
+})
+
+test_that("the horizon is where the exact remainder falls below tol", {
+  alpha <- .lq_alpha(.ref_k, .ref_beta)$alpha
+  s <- .scalars(alpha, .ref_beta)
+  hh <- .zpf_horizon(alpha, .ref_beta)
+  d <- .dweights(alpha, .ref_beta, horizon = hh)$d
+
+  # At the horizon the remainder is inside tolerance, and one term earlier
+  # it is not -- so the horizon is the first such H, not merely some H.
+  expect_lte(abs(s$sum_d - sum(d)) / abs(s$sum_d), .TOL_ZPF)
+  expect_gt(abs(s$sum_d - sum(d[-length(d)])) / abs(s$sum_d), .TOL_ZPF)
+
+  # A looser tolerance must not need a longer horizon.
+  expect_lte(.zpf_horizon(alpha, .ref_beta, tol = 1e-6), hh)
+})
