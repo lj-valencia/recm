@@ -5,10 +5,10 @@ NEWS.md entry.
 
 ---
 
-## `recm()`
+## `recm_estimate()`
 
 ```r
-recm(y, ystar, vars = NULL, beta = 1, data,
+recm_estimate(y, ystar, vars = NULL, beta = 1, data,
              m = 3, cost = c("geometric", "free"),
              expectations = NULL, var_lags = 4, diff_exp = TRUE,
              method = c("nls", "gmm"), instruments = NULL, iv_lag = NULL,
@@ -32,7 +32,7 @@ recm(y, ystar, vars = NULL, beta = 1, data,
 | Argument | Default | Notes |
 |---|---|---|
 | `m` | `3` | cost polynomial order; equation carries `m-1` lags of `dy`. |
-| `cost` | `"geometric"` | `k_j = kappa*psi^(j-1)`, 2 params. `"free"` gives `m` params — only usable for `m <= 4`. |
+| `cost` | `"geometric"` | `k_j = kappa*psi^(j-1)`, 2 params. `"free"` gives `m` params — only usable for `m <= 4`, and warns above it regardless of `quiet`. Adding a third is one `.COST` entry plus one word here; see the extension point in `docs/01`. |
 | `free_forward` | `FALSE` | if `TRUE`, `a_f` estimated freely instead of restricted to `sum(d_i)`. This is the Euler test. |
 | `growth` | `NULL` | column name of trend growth; adds the growth-neutrality correction. |
 
@@ -52,7 +52,7 @@ recm(y, ystar, vars = NULL, beta = 1, data,
 | `instruments` | `NULL` | *excluded* instruments for GMM, added to the automatic set. Taken as supplied — `iv_lag` is not applied to them. Collinear columns dropped by QR pivot. |
 | `iv_lag` | `NULL` → `var_lags + 2` | lag for the `y`/`ystar`-derived automatic instruments (ecm, lagged `dy`, `d(ystar)` states). Other state variables stay at `t-1` regardless — that exemption is what keeps the model identified. `iv_lag = 1` is more efficient and valid only if `ystar` is measured exactly; it warns. |
 | `hac_lags` | `NULL` | Newey-West bandwidth; `NULL` uses `floor(4*(T/100)^(2/9))`. |
-| `start`, `subset`, `maxit`, `restarts`, `quiet` | | optimiser and sample control. `restarts` re-runs Nelder-Mead from its own solution, which matters — a single pass routinely stops short. |
+| `start`, `subset`, `maxit`, `restarts`, `quiet` | | optimiser and sample control. `restarts` re-runs Nelder-Mead from its own solution, which matters — a single pass routinely stops short. `start` must have one element per free cost parameter and errors otherwise. |
 
 ### On `beta = 1`
 
