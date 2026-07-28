@@ -2,52 +2,40 @@
 % Please edit documentation in R/recm-package.R
 \docType{package}
 \name{recm-package}
-\alias{recm}
 \alias{recm-package}
-\title{recm: Rational Error Correction Model}
+\title{recm: Rational Error Correction Models}
 \description{
-Estimation of polynomial adjustment cost (PAC) equations under a rational error correction (REC) framework, the forward-looking error-correction specification used in the Federal Reserve Board's FRB/US model and the Bank of Canada's LENS model. Given a decision variable, a frictionless target and a calibrated discount factor, the package recovers the adjustment cost parameters and reports the implied decision rule in both the explicit and the compressed (LENS-style) formats. Because the criterion is routinely near-flat, profile and bootstrap diagnostics are treated as part of the standard output rather than as optional extras.
+Estimation of rational error correction (REC) models, the econometric
+representation of polynomial adjustment cost (PAC) behaviour described in
+Tinsley (2002) and in the FRB/US "PAC basics" note.
 }
 \details{
-\code{recm} estimates polynomial adjustment cost (PAC) equations under a
-rational error correction (REC) framework. A PAC equation is the solution
-to the intertemporal problem
-
-\deqn{\min E_{t-1} \sum_i \beta^i \left[ k_0 (y - y^*)^2 +
-  \sum_{j=1}^{m} k_j ((1-L)^j y)^2 \right]}
-
-The user supplies a decision variable \code{y}, a frictionless target \code{ystar}
-and a \strong{calibrated} discount factor \code{beta}; the package recovers the
-adjustment cost weights \code{k} and reports the implied decision rule.
-
-The entry point is \code{\link[=recm_estimate]{recm_estimate()}}. Because the criterion is routinely
-near-flat, \code{\link[=recm_profile]{recm_profile()}} and \code{\link[=recm_boot]{recm_boot()}} should be treated as part of
-the standard output rather than as optional diagnostics.
+A rational error correction model is not written down, it is derived from an
+intertemporal quadratic optimisation problem under rational expectations.
+The derivation buys a set of cross-equation restrictions linking the speed of
+adjustment, the weights on expected future changes in the target, and the
+structural adjustment costs. `recm()` imposes those restrictions.
 }
-\section{Three things to know before using this package}{
+\section{Entry point}{
 
-
-\strong{Calibrate \code{beta}.} It is not identified jointly with the cost
-parameters; it enters only through the composite operator
-\eqn{(1 - \beta F)(1 - L)}. Use \code{1/(1+r)} with a real quarterly rate. The
-default of \code{1} is admissible and warns.
-
-\strong{The criterion is often nearly flat.} This is inverse optimal control:
-many cost configurations rationalise nearly identical behaviour. Point
-estimates alone are not a defensible output.
-
-\strong{Reported standard errors are optimistic.} \code{Z_t} is a generated
-regressor depending on the auxiliary VAR and on \code{ystar}. In Monte Carlo
-the conditional standard errors came in at roughly half the true sampling
-standard deviation. \code{\link[=recm_boot]{recm_boot()}} is the fix.
+[recm()] is the only exported estimator. Everything else in the package is
+internal machinery reachable through the fitted object.
 }
 
-\seealso{
-\code{docs/02-math-spec.md} for the mathematics this package
-implements.
+\references{
+Tinsley, P. A. (2002). Rational error correction. *Computational
+Economics*, 19(2), 197--225.
+
+Brayton, F., Davis, M., and Tulip, P. (2000). Polynomial adjustment costs in
+FRB/US. Federal Reserve Board.
 }
 \author{
 \strong{Maintainer}: LJ Valencia \email{leb_valencia@yahoo.com}
+
+Authors:
+\itemize{
+  \item LJ Valencia \email{leb_valencia@yahoo.com}
+}
 
 }
 \keyword{internal}

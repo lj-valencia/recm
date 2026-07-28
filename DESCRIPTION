@@ -1,36 +1,29 @@
 Package: recm
 Type: Package
-Title: Rational Error Correction Model
-Version: 0.0.0.9000
+Title: Rational Error Correction Models
+Version: 0.1.0
 Authors@R: c(
     person(
-      given = "LJ",
-      family = "Valencia",
+      "LJ Valencia",
       email = "leb_valencia@yahoo.com",
       role = c("aut", "cre")
     )
   )
-Description: Estimation of polynomial adjustment cost (PAC) equations under a
-    rational error correction (REC) framework, the forward-looking
-    error-correction specification used in the Federal Reserve Board's FRB/US
-    model and the Bank of Canada's LENS model. Given a decision variable, a
-    frictionless target and a calibrated discount factor, the package recovers
-    the adjustment cost parameters and reports the implied decision rule in
-    both the explicit and the compressed (LENS-style) formats. Because the
-    criterion is routinely near-flat, profile and bootstrap diagnostics are
-    treated as part of the standard output rather than as optional extras.
+Description: Estimation of rational error correction models, the econometric
+    representation of polynomial adjustment cost behaviour described in
+    Tinsley (2002) and in the FRB/US 'PAC basics' note. The cross-equation restrictions linking the
+    speed of adjustment, the weights on expected future changes in the target 
+    and the structural adjustment costs are imposed rather than assumed, 
+    as is the growth neutrality condition. Expectations are formed either from
+    VAR-driven expectations or model-consistent expectations. Estimation is
+    currently available in iterative OLS.
 License: GPL-3
 Encoding: UTF-8
-Depends:
-    R (>= 4.1)
+Depends: R (>= 3.5.0)
 Imports:
-    graphics,
-    grDevices,
-    stats
+    stats,
+    utils
 Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
-URL: https://github.com/lj-valencia/recm
-BugReports: https://github.com/lj-valencia/recm/issues
+Config/roxygen2/version: 8.0.0
