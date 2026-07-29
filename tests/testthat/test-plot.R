@@ -1,12 +1,6 @@
 ## Plotting is exercised on a null pdf device, so nothing reaches the disk and
-## nothing depends on a display being available.
-
-# Draw on a throwaway device and return whatever the expression returned.
-on_null_device <- function(expr) {
-  grDevices::pdf(NULL)
-  on.exit(grDevices::dev.off(), add = TRUE)
-  force(expr)
-}
+## nothing depends on a display being available. on_null_device() lives in
+## helper-recm.R, since the forecast plots are tested from another file.
 
 # The columns are named as strings rather than as bare symbols: inside a
 # function body the non-standard evaluation form reads as an unbound variable,

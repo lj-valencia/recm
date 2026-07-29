@@ -346,7 +346,11 @@ recm <- function(y, y_star, data,
       index = md$index[keep],
       variables = list(y = y_name, y_star = ystar_name, w = des$w_names,
                        w_terms = des$w_terms),
-      model = list(dy = dy_est, x = x_est)
+      # `data` and `index` are the whole sample, not the estimation rows:
+      # predict() iterates the decision rule forward from the end of it and
+      # needs y and y_star in levels, plus the last level of each exogenous
+      # regressor to difference the first new one against.
+      model = list(dy = dy_est, x = x_est, data = md$x, index = md$index)
     ),
     class = "recm"
   )

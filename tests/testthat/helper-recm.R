@@ -10,6 +10,14 @@
 ## therefore with the error correction term, so a series generated one way
 ## must not be used to test the other branch.
 
+# Draw on a throwaway null device and return whatever the expression returned,
+# so nothing reaches the disk and nothing depends on a display being available.
+on_null_device <- function(expr) {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  force(expr)
+}
+
 # The companion matrix of a stationary AR(p) with a constant, matching the
 # layout fit_aux_var() builds.
 make_companion <- function(const, ar) {

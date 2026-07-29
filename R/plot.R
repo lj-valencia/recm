@@ -461,3 +461,147 @@ plot.recm <- function(x,
 
   invisible(x)
 }
+
+## The forecast decomposition. Bars are the contribution of each term of the
+## equation, drawn from zero so a term working against the forecast reads as a
+## bar below the line rather than as a shorter one above it, and the total is
+## drawn over them.
+
+# One colour per contribution, evenly spaced around the hue circle. Built with
+# grDevices::hcl() rather than hcl.colors(), which arrived in R 3.6 and would
+# lift the package's stated dependency for the sake of a palette.
+recm_contrib_cols <- function(n) {
+  if (n < 1L) {
+    return(character(0))
+  }
+  grDevices::hcl(h = seq(15, 375, length.out = n + 1L)[seq_len(n)],
+                 c = 58, l = 72)
+}
+
+# Thin the bar labels so a long horizon does not overplot its own axis.
+recm_bar_labels <- function(lab, max_n = 12L) {
+  s <- as.character(lab)
+  if (length(s) <= max_n) {
+    return(s)
+  }
+  keep <- unique(round(seq(1, length(s), length.out = max_n)))
+  out <- rep("", length(s))
+  out[keep] <- s[keep]
+  out
+}
+
+#' Plot a rational error correction forecast and its contributions
+#'
+#' Stacked bars of the contribution of each term of the equation to the
+#' forecast, with the forecast itself drawn over them. Contributions of
+#' opposite sign are stacked away from zero in opposite directions, so a term
+#' pulling against the forecast is visible as such.
+#'
+#' @param x An object of class `"recm_forecast"` returned by
+#'   [predict.recm()].
+#' @param type `"diff"`, the default, decomposes the forecast of
+#'   \eqn{\Delta y} period by period. `"level"` decomposes the forecast of
+#'   \eqn{y} itself, as cumulated contributions measured from the forecast
+#'   origin \eqn{y_T}; the bars and the line are then both differences from
+#'   that origin, since \eqn{y_T} would otherwise set the scale of the panel
+#'   on its own.
+#' @param main Title. `NULL`, the default, describes the panel.
+#' @param col Fill colours, recycled over the terms. `NULL` spaces them around
+#'   the hue circle.
+#' @param legend Draw the two legends, naming the terms and the forecast line.
+#' @param ... Further graphical parameters passed to [graphics::barplot()].
+#'
+#' @return `x`, invisibly.
+#'
+#' @seealso [predict.recm()], [plot.recm()].
+#'
+#' @examples
+#' set.seed(1)
+#' n <- 300
+#' dystar <- as.numeric(stats::filter(rnorm(n, 0.5, 0.4), 0.6, "recursive"))
+#' ystar <- 100 + cumsum(dystar)
+#' y <- numeric(n)
+#' y[1] <- ystar[1]
+#' for (t in 2:n) {
+#'   y[t] <- y[t - 1] + 0.3 * (ystar[t - 1] - y[t - 1]) +
+#'     0.7 * dystar[t] + rnorm(1, 0, 0.1)
+#' }
+#' fit <- recm(y, ystar, data.frame(y = y, ystar = ystar))
+#' fc <- predict(fit, n_ahead = 12)
+#'
+#' plot(fc)
+#' plot(fc, type = "level")
+#'
+#' @export
+plot.recm_forecast <- function(x,
+                               type = c("diff", "level"),
+                               main = NULL,
+                               col = NULL,
+                               legend = TRUE,
+                               ...) {
+  type <- match.arg(type)
+  if (!is.logical(legend) || length(legend) != 1L || is.na(legend)) {
+    stop("`legend` must be TRUE or FALSE.", call. = FALSE)
+  }
+
+  pal <- recm_pal()
+  df <- if (type == "diff") x$contributions else x$levels
+  cm <- t(as.matrix(df[, x$terms, drop = FALSE]))
+  # In levels the origin is carried by the `base` column, which is constant
+  # and would flatten everything else; both the bars and the line are drawn
+  # as movements away from it instead.
+  total <- if (type == "diff") {
+    unname(x$fit)
+  } else {
+    unname(x$level) - x$base
+  }
+  cols <- if (is.null(col)) {
+    recm_contrib_cols(nrow(cm))
+  } else {
+    rep_len(as.character(col), nrow(cm))
+  }
+
+  pos <- pmax(cm, 0)
+  neg <- pmin(cm, 0)
+  drawn <- if (type == "diff") paste0("d", x$variables$y) else x$variables$y
+  ylab <- if (type == "diff") {
+    drawn
+  } else {
+    paste0(x$variables$y, " since the forecast origin")
+  }
+  main_txt <- if (is.null(main)) {
+    paste0("Forecast of ", drawn, " and its contributions")
+  } else {
+    as.character(main)[1L]
+  }
+
+  # The legends sit in the two top corners, so they need room above the
+  # tallest stack or they are drawn over it.
+  ylim <- range(0, colSums(pos), colSums(neg), total, finite = TRUE)
+  if (isTRUE(legend)) {
+    ylim[2L] <- ylim[2L] + 0.15 * max(diff(ylim), .Machine$double.eps)
+  }
+
+  bp <- graphics::barplot(
+    pos, col = cols, border = NA, main = main_txt, ylab = ylab,
+    xlab = "Time", ylim = ylim,
+    names.arg = recm_bar_labels(x$time), las = 2L, ...
+  )
+  graphics::barplot(neg, col = cols, border = NA, add = TRUE, axes = FALSE,
+                    axisnames = FALSE)
+  graphics::abline(h = 0, col = pal$ref)
+  graphics::lines(bp, total, col = pal$hi, lwd = 2)
+  graphics::points(bp, total, pch = 16L, cex = 0.7, col = pal$hi)
+
+  if (isTRUE(legend)) {
+    graphics::legend("topleft", bty = "n", cex = 0.7, fill = cols,
+                     border = "white", legend = rownames(cm))
+    graphics::legend(
+      "topright", bty = "n", cex = 0.7, lwd = 2, col = pal$hi,
+      legend = paste0("forecast ",
+                      if (type == "diff") paste0("d", x$variables$y) else
+                        x$variables$y)
+    )
+  }
+  invisible(x)
+}
