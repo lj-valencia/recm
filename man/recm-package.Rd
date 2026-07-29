@@ -14,17 +14,17 @@ A rational error correction model is not written down, it is derived from an
 intertemporal quadratic optimisation problem under rational expectations.
 The derivation buys a set of cross-equation restrictions linking the speed of
 adjustment, the weights on expected future changes in the target, and the
-structural adjustment costs. `recm()` imposes those restrictions.
+structural adjustment costs. \code{recm()} imposes those restrictions.
 }
 \section{Entry point}{
 
-[recm()] is the only exported estimator. Everything else in the package is
+\code{\link[=recm]{recm()}} is the only exported estimator. Everything else in the package is
 internal machinery reachable through the fitted object.
 }
 
 \references{
-Tinsley, P. A. (2002). Rational error correction. *Computational
-Economics*, 19(2), 197--225.
+Tinsley, P. A. (2002). Rational error correction. \emph{Computational
+Economics}, 19(2), 197--225.
 
 Brayton, F., Davis, M., and Tulip, P. (2000). Polynomial adjustment costs in
 FRB/US. Federal Reserve Board.

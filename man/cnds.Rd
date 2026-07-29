@@ -5,18 +5,18 @@
 \alias{cnds}
 \title{Canadian non-durable goods and services consumption, LENS specification}
 \format{
-A quarterly [stats::ts] matrix, 1963 Q1 to 2026 Q1, 253 rows and
-  three columns:
+A quarterly \link[stats:ts]{stats::ts} matrix, 1963 Q1 to 2026 Q1, 253 rows and
+three columns:
 \describe{
-  \item{`cnds_pc`}{Log nominal household final consumption expenditure on
-    non-durable goods and services per capita, dollars per person at annual
-    rates. Statistics Canada table 36-10-0104, vectors v62305759 and
-    v62305760, divided by quarterly population (v1).}
-  \item{`cndsf_pc`}{Log frictionless (target) level of the same, built from
-    equation (3). See Details.}
-  \item{`hhdisinc_real`}{Log real household disposable income, aggregate,
-    table 36-10-0112 vector v62305980 deflated by the implicit price index
-    for the non-durables-and-services aggregate.}
+\item{\code{cnds_pc}}{Log nominal household final consumption expenditure on
+non-durable goods and services per capita, dollars per person at annual
+rates. Statistics Canada table 36-10-0104, vectors v62305759 and
+v62305760, divided by quarterly population (v1).}
+\item{\code{cndsf_pc}}{Log frictionless (target) level of the same, built from
+equation (3). See Details.}
+\item{\code{hhdisinc_real}}{Log real household disposable income, aggregate,
+table 36-10-0112 vector v62305980 deflated by the implicit price index
+for the non-durables-and-services aggregate.}
 }
 }
 \source{
@@ -26,7 +26,7 @@ households), 17-10-0009 (population estimates), 36-10-0099 (flows and
 stocks of fixed residential capital) and 36-10-0098 (flows and stocks of
 fixed non-residential capital).
 
-The generating script is `data-raw/cnds.R`, which is kept in the repository
+The generating script is \code{data-raw/cnds.R}, which is kept in the repository
 but excluded from the build.
 }
 \usage{
@@ -37,15 +37,14 @@ The series behind the Bank of Canada LENS model's equation for spending on
 non-durable goods and services, rebuilt from Statistics Canada data. The
 frictionless level is constructed from equation (3) of Gervais and Gosselin
 (2014); the dataset is laid out so that equation (4), the rational error
-correction specification, can be estimated directly with [recm()].
+correction specification, can be estimated directly with \code{\link[=recm]{recm()}}.
 }
 \details{
-**All three columns are natural logarithms.** Equations (3) and (4) are
+\strong{All three columns are natural logarithms.} Equations (3) and (4) are
 written in logs: the error correction term is a log gap and the first
-differences are growth rates. [recm()] takes bare column names and cannot
-apply `log()` inline, so the transform is applied here rather than being
+differences are growth rates. \code{\link[=recm]{recm()}} takes bare column names and cannot
+apply \code{log()} inline, so the transform is applied here rather than being
 pushed onto every caller.
-
 
 Equation (3), the frictionless level, imposes the permanent income
 restriction that the weights on human and non-human wealth sum to one:
@@ -62,7 +61,7 @@ correction specification at adjustment cost order \eqn{m = 2}:
 Consumer confidence is deliberately not included in this dataset, so the
 \eqn{\Delta CCONF} term cannot be reproduced. Note that
 \eqn{-0.15(c_{t-1} - c^{f}_{t-1})} is \eqn{+0.15(c^{f}_{t-1} - c_{t-1})},
-which is [recm()]'s own sign convention.
+which is \code{\link[=recm]{recm()}}'s own sign convention.
 }
 \section{How this differs from LENS}{
 
@@ -85,7 +84,7 @@ interpolated to quarterly against an indicator accumulated from quarterly
 investment, exactly reproducing the published figure in the fourth quarter
 of each year and splicing forward past the last annual benchmark.
 
-\strong{Nominal against real.} `cnds_pc` is nominal while human wealth is
+\strong{Nominal against real.} \code{cnds_pc} is nominal while human wealth is
 real, so the error correction gap carries the price level. This is a
 deliberate choice, not an oversight.
 }
@@ -127,10 +126,10 @@ summary(fit)
 }
 \references{
 Gervais, O. and Gosselin, M.-A. (2014). Analyzing and Forecasting the
-Canadian Economy through the LENS Model. *Bank of Canada Technical Report
-No. 102*. \doi{10.34989/tr-102}
+Canadian Economy through the LENS Model. \emph{Bank of Canada Technical Report
+No. 102}. \doi{10.34989/tr-102}
 }
 \seealso{
-[recm()]
+\code{\link[=recm]{recm()}}
 }
 \keyword{datasets}

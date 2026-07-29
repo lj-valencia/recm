@@ -32,7 +32,7 @@
 \method{print}{summary.recm}(x, digits = max(3L, getOption("digits") - 3L), ...)
 }
 \arguments{
-\item{object, x}{An object of class `"recm"` returned by [recm()].}
+\item{object, x}{An object of class \code{"recm"} returned by \code{\link[=recm]{recm()}}.}
 
 \item{...}{Ignored, present for consistency with the generics.}
 

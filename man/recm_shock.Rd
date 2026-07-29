@@ -16,33 +16,33 @@ recm_shock(
 }
 \arguments{
 \item{variable}{Name of the variable shocked, either the frictionless
-target `y_star` or one of the exogenous regressors, as named in the fit.
+target \code{y_star} or one of the exogenous regressors, as named in the fit.
 The decision variable itself cannot be shocked: it is produced by the
 recursion rather than supplied to it.}
 
-\item{size}{Size of the displacement, in the units of `variable`. A single
-number, or, with `type = "path"`, the whole displacement path.}
+\item{size}{Size of the displacement, in the units of \code{variable}. A single
+number, or, with \code{type = "path"}, the whole displacement path.}
 
 \item{period}{Horizon at which the shock lands, counting the first simulated
 period as 1.}
 
-\item{type}{`"permanent"` holds the level `size` higher from `period`
-onwards; `"transitory"` displaces it in `period` alone and returns it to
-baseline after; `"path"` takes `size` as an arbitrary displacement path
-beginning at `period`.}
+\item{type}{\code{"permanent"} holds the level \code{size} higher from \code{period}
+onwards; \code{"transitory"} displaces it in \code{period} alone and returns it to
+baseline after; \code{"path"} takes \code{size} as an arbitrary displacement path
+beginning at \code{period}.}
 
-\item{x}{An object of class `"recm_shock"`.}
+\item{x}{An object of class \code{"recm_shock"}.}
 
 \item{...}{Ignored, present for consistency with the generic.}
 }
 \value{
-An object of class `"recm_shock"`.
+An object of class \code{"recm_shock"}.
 }
 \description{
 Describes a perturbation to the path of one of the inputs of the decision
-rule, for [simulate.recm()] to trace the response to. The shock is always
-stated in the units and the level of the variable it names: `type` and
-`period` say when the level is displaced and for how long, not how the
+rule, for \code{\link[=simulate.recm]{simulate.recm()}} to trace the response to. The shock is always
+stated in the units and the level of the variable it names: \code{type} and
+\code{period} say when the level is displaced and for how long, not how the
 displacement is transformed on its way into the equation.
 }
 \examples{
@@ -57,5 +57,5 @@ recm_shock("ystar", size = c(0.5, 1, 0.5), type = "path")
 
 }
 \seealso{
-[simulate.recm()].
+\code{\link[=simulate.recm]{simulate.recm()}}.
 }

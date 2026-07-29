@@ -16,62 +16,62 @@ recm(
 )
 }
 \arguments{
-\item{y}{The decision variable. A bare column name of `data` (not a
+\item{y}{The decision variable. A bare column name of \code{data} (not a
 string is required, though a character scalar also works).}
 
 \item{y_star}{The frictionless target, in levels, given rather than
-estimated. Also a bare column name of `data`.}
+estimated. Also a bare column name of \code{data}.}
 
-\item{data}{A `ts`/`mts`, `data.frame` (tibbles and data tables qualify) or
-named numeric matrix holding `y`, `y_star`, and any exogenous regressors.
-**Every remaining numeric column is used as an exogenous regressor**
+\item{data}{A \code{ts}/\code{mts}, \code{data.frame} (tibbles and data tables qualify) or
+named numeric matrix holding \code{y}, \code{y_star}, and any exogenous regressors.
+\strong{Every remaining numeric column is used as an exogenous regressor}
 \eqn{W_t}, dated \eqn{t}. At most one non-numeric column is allowed and is
 taken as the time index. No intercept is fitted: a free constant is
 inconsistent with growth neutrality, and the auxiliary autoregression
 carries the drift instead.}
 
-\item{expectations}{How expectations of the target are formed. `"var"`
+\item{expectations}{How expectations of the target are formed. \code{"var"}
 (default) uses the auxiliary univariate autoregression with information
-dated \eqn{t-1}, giving \eqn{Z_t = h' z_{t-1}} in closed form. `"mce"`
+dated \eqn{t-1}, giving \eqn{Z_t = h' z_{t-1}} in closed form. \code{"mce"}
 uses model consistent expectations, evaluated on the realised path of the
 target by the finite-lead backward recursion.}
 
-\item{method}{Estimator. Only `"ols"`, the FRB/US iterative ordinary least
-squares zig-zag, is implemented in this release; `"nls"` and `"gmm"` are
+\item{method}{Estimator. Only \code{"ols"}, the FRB/US iterative ordinary least
+squares zig-zag, is implemented in this release; \code{"nls"} and \code{"gmm"} are
 accepted by the signature and error informatively.}
 
 \item{m}{Order of the adjustment cost polynomial: the highest difference
 penalised in the loss. It fixes the number of lags of \eqn{\Delta y} at
-`m - 1`, so `m = 1` is the canonical rational error correction model with
+\code{m - 1}, so \code{m = 1} is the canonical rational error correction model with
 no autoregressive terms. Unrelated to the length of the forward sum, which
 is never truncated.}
 
 \item{discount}{The discount factor \eqn{\beta}, calibrated and never
-estimated. Must lie in \eqn{(0, 1]}. At the default `discount = 1` the
-equation is growth neutral for any coefficients and any `m`, so the
+estimated. Must lie in \eqn{(0, 1]}. At the default \code{discount = 1} the
+equation is growth neutral for any coefficients and any \code{m}, so the
 restriction described below is slack.}
 
-\item{tr_exog}{Difference the exogenous regressors, as `y` and `y_star` are
-differenced. `TRUE`, the default, enters each of them as \eqn{\Delta W_t}
-and labels the coefficient `d_<name>`. Set it to `FALSE` only for a
+\item{tr_exog}{Difference the exogenous regressors, as \code{y} and \code{y_star} are
+differenced. \code{TRUE}, the default, enters each of them as \eqn{\Delta W_t}
+and labels the coefficient \verb{d_<name>}. Set it to \code{FALSE} only for a
 regressor that genuinely belongs in the equation in levels, such as a
 dummy or a stationary spread; see the section below.}
 }
 \value{
-An object of class `"recm"`. Use [summary()][summary.recm] for the
-  coefficient table and the diagnostics, and [coef()], [vcov()],
-  [fitted()] and [residuals()] as usual. Notable list elements are
-  `lead_weights`, `structural` (the adjustment costs \eqn{k_j}),
-  `growth` (the neutrality gap and whether it was imposed), `aux` (the
-  auxiliary autoregression) and `forward_loading` (the free versus
-  restricted total forward loading).
+An object of class \code{"recm"}. Use \link[=summary.recm]{summary()} for the
+coefficient table and the diagnostics, and \code{\link[=coef]{coef()}}, \code{\link[=vcov]{vcov()}},
+\code{\link[=fitted]{fitted()}} and \code{\link[=residuals]{residuals()}} as usual. Notable list elements are
+\code{lead_weights}, \code{structural} (the adjustment costs \eqn{k_j}),
+\code{growth} (the neutrality gap and whether it was imposed), \code{aux} (the
+auxiliary autoregression) and \code{forward_loading} (the free versus
+restricted total forward loading).
 
-  `r.squared` and `adj.r.squared` compare \eqn{\Delta y} with its fitted
-  value. Both are uncentered, dividing by \eqn{\sum \Delta y_t^2} rather
-  than by the sum of squared deviations from \eqn{\overline{\Delta y}},
-  because no intercept is fitted. The drift in the target counts as
-  explained variation, so neither is comparable with an R-squared from an
-  equation carrying a constant.
+\code{r.squared} and \code{adj.r.squared} compare \eqn{\Delta y} with its fitted
+value. Both are uncentered, dividing by \eqn{\sum \Delta y_t^2} rather
+than by the sum of squared deviations from \eqn{\overline{\Delta y}},
+because no intercept is fitted. The drift in the target counts as
+explained variation, so neither is comparable with an R-squared from an
+equation carrying a constant.
 }
 \description{
 Fits the rational error correction (REC) representation of polynomial
@@ -93,13 +93,13 @@ is fixed at 1 by construction.
 
 On a balanced growth path the equation delivers \eqn{y = y^*} only if
 \eqn{R(a) = 1 - \sum_i a_i - \sum_i d_i = 0}. FRB/US and Dynare satisfy this
-by adding \eqn{R(a) g} to the equation. `recm()` instead imposes
+by adding \eqn{R(a) g} to the equation. \code{recm()} instead imposes
 \eqn{R(a) = 0} as a nonlinear restriction on the estimated coefficients, so
 nothing is added and neutrality holds by construction. The restriction is
 linearised at each zig-zag sweep, which is exact at the fixed point.
 
-At `discount = 1` the restriction holds identically and is not imposed. At
-`discount < 1` with `m = 1` it degenerates: \eqn{R(a_0) = 0} forces
+At \code{discount = 1} the restriction holds identically and is not imposed. At
+\code{discount < 1} with \code{m = 1} it degenerates: \eqn{R(a_0) = 0} forces
 \eqn{a_0 = 1}, instantaneous adjustment, so that combination is refused.
 }
 
@@ -109,12 +109,12 @@ The dependent variable is a difference, so an exogenous regressor left in
 levels is not the same kind of object as the rest of the equation. If such a
 regressor trends, it puts a trend into \eqn{\Delta y} and the equation is no
 longer growth neutral whatever the coefficients do, which defeats the
-restriction above. `tr_exog = TRUE` therefore differences them by default.
+restriction above. \code{tr_exog = TRUE} therefore differences them by default.
 
-`tr_exog = FALSE` is right when the regressor is already stationary and its
+\code{tr_exog = FALSE} is right when the regressor is already stationary and its
 level is the economically meaningful quantity: a dummy, a spread, a gap. It
 applies to all of them at once, so mixed cases are handled by differencing
-the relevant columns in `data` beforehand and passing `FALSE`.
+the relevant columns in \code{data} beforehand and passing \code{FALSE}.
 }
 
 \section{Standard errors}{
@@ -148,6 +148,6 @@ summary(fit)
 
 }
 \references{
-Tinsley, P. A. (2002). Rational error correction. *Computational
-Economics*, 19(2), 197--225.
+Tinsley, P. A. (2002). Rational error correction. \emph{Computational
+Economics}, 19(2), 197--225.
 }

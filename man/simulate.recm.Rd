@@ -18,69 +18,69 @@
 \method{print}{recm_simulation}(x, digits = max(3L, getOption("digits") - 3L), ...)
 }
 \arguments{
-\item{object}{An object of class `"recm"` returned by [recm()].}
+\item{object}{An object of class \code{"recm"} returned by \code{\link[=recm]{recm()}}.}
 
-\item{nsim}{Number of paths. Only `1` is accepted: the path is the
+\item{nsim}{Number of paths. Only \code{1} is accepted: the path is the
 deterministic one, the decision rule iterated forward with the equation
 error set to zero, so a second replicate would be identical to the first.
-The argument is present because [stats::simulate()] defines it.}
+The argument is present because \code{\link[stats:simulate]{stats::simulate()}} defines it.}
 
 \item{seed}{Not used, and refused when supplied rather than silently
 ignored, because nothing here is random. Present for the same reason as
-`nsim`.}
+\code{nsim}.}
 
-\item{newdata}{Values of the frictionless target `y_star` and of any
+\item{newdata}{Values of the frictionless target \code{y_star} and of any
 exogenous regressors over the simulated periods, under the names they were
-estimated with. A `ts`, `data.frame` or named numeric matrix, ordered in
+estimated with. A \code{ts}, \code{data.frame} or named numeric matrix, ordered in
 time and with no gaps. A column holding the decision variable is ignored;
 see Details.}
 
-\item{n_ahead}{Length of the simulation. Supplied with `newdata` it
-truncates it to the first `n_ahead` rows. Supplied on its own it projects
+\item{n_ahead}{Length of the simulation. Supplied with \code{newdata} it
+truncates it to the first \code{n_ahead} rows. Supplied on its own it projects
 the target from the fitted auxiliary autoregression.}
 
-\item{shock}{A shock to trace the response to, from [recm_shock()], or the
-shorthand `c(ystar = 1)` for a permanent unit shock. `NULL`, the default,
+\item{shock}{A shock to trace the response to, from \code{\link[=recm_shock]{recm_shock()}}, or the
+shorthand \code{c(ystar = 1)} for a permanent unit shock. \code{NULL}, the default,
 simulates the path itself rather than a response to anything.}
 
 \item{...}{Ignored, present for consistency with the generic.}
 
-\item{x}{An object of class `"recm_simulation"`.}
+\item{x}{An object of class \code{"recm_simulation"}.}
 
 \item{digits}{Number of significant digits used when printing.}
 }
 \value{
-An object of class `"recm_simulation"`, a list with the same
-  elements as a [predict.recm()] forecast - `fit`, `level`, `base`,
-  `contributions`, `levels`, `forward_term`, `terms` - together with
-  \describe{
-    \item{`shock`}{The shock traced, or `NULL`.}
-    \item{`baseline`, `shocked`}{With a shock, the two simulations whose
-      difference is being reported. Absent otherwise.}
-  }
-  With a shock, `fit` and `level` are responses rather than paths: `fit` is
-  the deviation of \eqn{\Delta y} from baseline period by period, `level`
-  the deviation of \eqn{y}, and `base` is `0`.
+An object of class \code{"recm_simulation"}, a list with the same
+elements as a \code{\link[=predict.recm]{predict.recm()}} forecast - \code{fit}, \code{level}, \code{base},
+\code{contributions}, \code{levels}, \code{forward_term}, \code{terms} - together with
+\describe{
+\item{\code{shock}}{The shock traced, or \code{NULL}.}
+\item{\code{baseline}, \code{shocked}}{With a shock, the two simulations whose
+difference is being reported. Absent otherwise.}
+}
+With a shock, \code{fit} and \code{level} are responses rather than paths: \code{fit} is
+the deviation of \eqn{\Delta y} from baseline period by period, \code{level}
+the deviation of \eqn{y}, and \code{base} is \code{0}.
 }
 \description{
 Iterates the estimated decision rule forward over a path of your choosing
 and decomposes the result, term by term, into the contribution of each
-variable. Given a `shock`, reports the impulse response: how the path
+variable. Given a \code{shock}, reports the impulse response: how the path
 differs from the one the same rule would have produced without it.
 }
 \details{
 The simulation is dynamic. The decision variable is iterated forward from
 the end of the estimation sample: the error correction term at \eqn{t+h} is
 formed from the model's own \eqn{y_{t+h-1}}, and the lagged differences from
-its own \eqn{\Delta y}. A column of `newdata` holding the decision variable
+its own \eqn{\Delta y}. A column of \code{newdata} holding the decision variable
 is therefore ignored rather than used.
 }
 \section{Impulse responses}{
 
-With a `shock`, the recursion is run twice - once over the baseline path,
+With a \code{shock}, the recursion is run twice - once over the baseline path,
 once over the same path with the shock added to the level of the variable it
-names - and `fit` and `level` report the difference. The two underlying
-paths are kept in `baseline` and `shocked`, each an ordinary simulation
+names - and \code{fit} and \code{level} report the difference. The two underlying
+paths are kept in \code{baseline} and \code{shocked}, each an ordinary simulation
 object in its own right.
 
 The response does not depend on the baseline it was measured against. The
@@ -88,14 +88,14 @@ decision rule is linear in its inputs and the forward term is linear in the
 states built from the target, so the difference between the two runs is a
 function of the shock alone. That is why a shocked simulation will project
 a baseline for itself, holding any exogenous regressors at their last
-observed level, in cases where [predict.recm()] refuses to project them: as
+observed level, in cases where \code{\link[=predict.recm]{predict.recm()}} refuses to project them: as
 a forecast that flat path would be a fiction, but as the baseline of a
 response it cancels exactly.
 
 Timing follows the model's information set, and the two expectation branches
-differ because of it. Under `expectations = "var"` the forward term at
+differ because of it. Under \code{expectations = "var"} the forward term at
 \eqn{t} is built from states dated \eqn{t-1}, so a shock landing in period
-\eqn{k} moves nothing until period \eqn{k+1}. Under `"mce"` the forward term
+\eqn{k} moves nothing until period \eqn{k+1}. Under \code{"mce"} the forward term
 is evaluated on the realised path and the response begins in period \eqn{k}
 itself.
 }
@@ -129,8 +129,8 @@ round(blip$level[c(1, 5, 60)], 3)
 
 }
 \seealso{
-[recm_shock()] for the shock, [plot.recm_simulation()] for the
-  picture, and [predict.recm()] for the same recursion put to the other
-  purpose: forecasting \eqn{y} over the next \eqn{h} periods rather than
-  exploring how the rule behaves.
+\code{\link[=recm_shock]{recm_shock()}} for the shock, \code{\link[=plot.recm_simulation]{plot.recm_simulation()}} for the
+picture, and \code{\link[=predict.recm]{predict.recm()}} for the same recursion put to the other
+purpose: forecasting \eqn{y} over the next \eqn{h} periods rather than
+exploring how the rule behaves.
 }

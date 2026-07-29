@@ -10,47 +10,47 @@
 \method{print}{recm_forecast}(x, digits = max(3L, getOption("digits") - 3L), ...)
 }
 \arguments{
-\item{object}{An object of class `"recm"` returned by [recm()].}
+\item{object}{An object of class \code{"recm"} returned by \code{\link[=recm]{recm()}}.}
 
-\item{newdata}{Future values of the frictionless target `y_star` and of any
-exogenous regressors, under the names they were estimated with. A `ts`,
-`data.frame` or named numeric matrix, ordered in time and with no gaps.
-`NULL`, the default, projects the target from the fitted auxiliary
+\item{newdata}{Future values of the frictionless target \code{y_star} and of any
+exogenous regressors, under the names they were estimated with. A \code{ts},
+\code{data.frame} or named numeric matrix, ordered in time and with no gaps.
+\code{NULL}, the default, projects the target from the fitted auxiliary
 autoregression, which is possible only when the fit carries no exogenous
 regressors, as those cannot be projected. A column holding the decision
 variable is ignored; see Details.}
 
 \item{n_ahead}{Forecast horizon \eqn{h}, a single positive whole number.
-Defaults to `1`, the one step ahead forecast. When `newdata` is supplied
-and `n_ahead` is not, the horizon is the number of rows of `newdata`;
-supplying both truncates `newdata` to its first `n_ahead` rows.}
+Defaults to \code{1}, the one step ahead forecast. When \code{newdata} is supplied
+and \code{n_ahead} is not, the horizon is the number of rows of \code{newdata};
+supplying both truncates \code{newdata} to its first \code{n_ahead} rows.}
 
 \item{...}{Ignored, present for consistency with the generic.}
 
-\item{x}{An object of class `"recm_forecast"`.}
+\item{x}{An object of class \code{"recm_forecast"}.}
 
 \item{digits}{Number of significant digits used when printing.}
 }
 \value{
-An object of class `"recm_forecast"`, a list whose elements are
-  \describe{
-    \item{`fit`}{The forecast path of \eqn{\Delta y}, named by time index.}
-    \item{`level`}{The forecast path of \eqn{y} itself.}
-    \item{`base`}{The forecast origin \eqn{y_T}, the last observation of the
-      decision variable in the estimation sample.}
-    \item{`contributions`}{A data frame with one row per period: the
-      horizon, the time index, one column per term of the equation, and
-      `fit`, their sum.}
-    \item{`levels`}{The same decomposition in levels: `base`, the
-      cumulated term columns, and `fit`, the forecast level.}
-    \item{`forward_term`}{\eqn{Z_t} over the horizon.}
-    \item{`terms`}{Names of the term columns of both frames.}
-    \item{`projected`}{Whether the target was projected from the auxiliary
-      autoregression rather than supplied.}
-  }
+An object of class \code{"recm_forecast"}, a list whose elements are
+\describe{
+\item{\code{fit}}{The forecast path of \eqn{\Delta y}, named by time index.}
+\item{\code{level}}{The forecast path of \eqn{y} itself.}
+\item{\code{base}}{The forecast origin \eqn{y_T}, the last observation of the
+decision variable in the estimation sample.}
+\item{\code{contributions}}{A data frame with one row per period: the
+horizon, the time index, one column per term of the equation, and
+\code{fit}, their sum.}
+\item{\code{levels}}{The same decomposition in levels: \code{base}, the
+cumulated term columns, and \code{fit}, the forecast level.}
+\item{\code{forward_term}}{\eqn{Z_t} over the horizon.}
+\item{\code{terms}}{Names of the term columns of both frames.}
+\item{\code{projected}}{Whether the target was projected from the auxiliary
+autoregression rather than supplied.}
+}
 }
 \description{
-Forecasts the decision variable over the next `n_ahead` periods by iterating
+Forecasts the decision variable over the next \code{n_ahead} periods by iterating
 the estimated decision rule forward from the end of the estimation sample,
 and decomposes the forecast, term by term, into the contribution of each
 variable.
@@ -59,12 +59,12 @@ variable.
 The forecast is dynamic, not a sequence of one step ahead conditional
 predictions. The decision variable is iterated forward: the error correction
 term at \eqn{t+h} is formed from the model's own \eqn{y_{t+h-1}}, and the
-lagged differences from its own \eqn{\Delta y}. A column of `newdata`
+lagged differences from its own \eqn{\Delta y}. A column of \code{newdata}
 holding the decision variable is therefore ignored rather than used, because
 using it would make the result a prediction of something already known, and
-`predict(object)` does not reproduce [fitted()][recm-methods] in sample.
+\code{predict(object)} does not reproduce \link[=recm-methods]{fitted()} in sample.
 
-Leaving `newdata` out gives the model's own forecast, with the target
+Leaving \code{newdata} out gives the model's own forecast, with the target
 projected from the auxiliary autoregression. Supplying it gives a
 conditional forecast, on the path of the target you assume. Either way the
 auxiliary autoregression is not re-estimated: the forward term uses the
@@ -81,10 +81,10 @@ term is fixed at 1, so
   + \delta' W_t}
 
 splits exactly, with nothing left over: the term columns of
-`contributions` sum to `fit` to machine precision. Cumulating them
+\code{contributions} sum to \code{fit} to machine precision. Cumulating them
 decomposes the level too, since \eqn{y_{T+h} = y_T + \sum_{s \le h}
-\Delta y_{T+s}}, which is what `levels` holds, with the forecast origin
-\eqn{y_T} carried in its own `base` column.
+\Delta y_{T+s}}, which is what \code{levels} holds, with the forecast origin
+\eqn{y_T} carried in its own \code{base} column.
 
 These are contributions to the forecast, not partial derivatives. The error
 correction term is formed from the forecast \eqn{y}, so its column carries
@@ -93,7 +93,7 @@ fixed and re-running the recursion would not move the total by that
 variable's contribution.
 
 No interval is reported. The standard errors the fit carries condition on
-the estimated auxiliary autoregression, and [summary.recm()][recm-methods]
+the estimated auxiliary autoregression, and \link[=recm-methods]{summary.recm()}
 says what that is worth: against a resampled target process they came in at
 roughly a third of the true sampling standard deviation. An interval built
 on them would inherit that and be too narrow by about as much.
@@ -128,8 +128,8 @@ head(predict(fit, newdata = future)$levels)
 
 }
 \seealso{
-[simulate.recm()], which iterates the same decision rule but for a
-  different purpose: over a path of your choosing, and with a shock, to
-  trace an impulse response rather than to forecast. [plot.recm_forecast()],
-  [recm()].
+\code{\link[=simulate.recm]{simulate.recm()}}, which iterates the same decision rule but for a
+different purpose: over a path of your choosing, and with a shock, to
+trace an impulse response rather than to forecast. \code{\link[=plot.recm_forecast]{plot.recm_forecast()}},
+\code{\link[=recm]{recm()}}.
 }
