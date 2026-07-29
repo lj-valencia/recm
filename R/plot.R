@@ -462,10 +462,10 @@ plot.recm <- function(x,
   invisible(x)
 }
 
-## The forecast decomposition. Bars are the contribution of each term of the
-## equation, drawn from zero so a term working against the forecast reads as a
-## bar below the line rather than as a shorter one above it, and the total is
-## drawn over them.
+## The path decomposition, shared by forecasts and simulations. Bars are the
+## contribution of each term of the equation, drawn from zero so a term working
+## against the total reads as a bar below the line rather than as a shorter one
+## above it, and the total is drawn over them.
 
 # One colour per contribution, evenly spaced around the hue circle. Built with
 # grDevices::hcl() rather than hcl.colors(), which arrived in R 3.6 and would
@@ -490,66 +490,18 @@ recm_bar_labels <- function(lab, max_n = 12L) {
   out
 }
 
-#' Plot a rational error correction forecast and its contributions
-#'
-#' Stacked bars of the contribution of each term of the equation to the
-#' forecast, with the forecast itself drawn over them. Contributions of
-#' opposite sign are stacked away from zero in opposite directions, so a term
-#' pulling against the forecast is visible as such.
-#'
-#' @param x An object of class `"recm_forecast"` returned by
-#'   [predict.recm()].
-#' @param type `"diff"`, the default, decomposes the forecast of
-#'   \eqn{\Delta y} period by period. `"level"` decomposes the forecast of
-#'   \eqn{y} itself, as cumulated contributions measured from the forecast
-#'   origin \eqn{y_T}; the bars and the line are then both differences from
-#'   that origin, since \eqn{y_T} would otherwise set the scale of the panel
-#'   on its own.
-#' @param main Title. `NULL`, the default, describes the panel.
-#' @param col Fill colours, recycled over the terms. `NULL` spaces them around
-#'   the hue circle.
-#' @param legend Draw the two legends, naming the terms and the forecast line.
-#' @param ... Further graphical parameters passed to [graphics::barplot()].
-#'
-#' @return `x`, invisibly.
-#'
-#' @seealso [predict.recm()], [plot.recm()].
-#'
-#' @examples
-#' set.seed(1)
-#' n <- 300
-#' dystar <- as.numeric(stats::filter(rnorm(n, 0.5, 0.4), 0.6, "recursive"))
-#' ystar <- 100 + cumsum(dystar)
-#' y <- numeric(n)
-#' y[1] <- ystar[1]
-#' for (t in 2:n) {
-#'   y[t] <- y[t - 1] + 0.3 * (ystar[t - 1] - y[t - 1]) +
-#'     0.7 * dystar[t] + rnorm(1, 0, 0.1)
-#' }
-#' fit <- recm(y, ystar, data.frame(y = y, ystar = ystar))
-#' fc <- predict(fit, n_ahead = 12)
-#'
-#' plot(fc)
-#' plot(fc, type = "level")
-#'
-#' @export
-plot.recm_forecast <- function(x,
-                               type = c("diff", "level"),
-                               main = NULL,
-                               col = NULL,
-                               legend = TRUE,
-                               ...) {
-  type <- match.arg(type)
-  if (!is.logical(legend) || length(legend) != 1L || is.na(legend)) {
-    stop("`legend` must be TRUE or FALSE.", call. = FALSE)
-  }
-
+# The drawing itself. Both methods reduce to this; all they contribute is the
+# wording, which is the only thing a forecast and a response should differ by
+# on the page.
+recm_draw_decomposition <- function(x, type, col, legend, main_txt, ylab,
+                                    line_lab, sub_txt = NULL, ...) {
   pal <- recm_pal()
   df <- if (type == "diff") x$contributions else x$levels
   cm <- t(as.matrix(df[, x$terms, drop = FALSE]))
   # In levels the origin is carried by the `base` column, which is constant
   # and would flatten everything else; both the bars and the line are drawn
-  # as movements away from it instead.
+  # as movements away from it instead. For a response `base` is already zero,
+  # so the subtraction is a no-op and the panel is centred where it should be.
   total <- if (type == "diff") {
     unname(x$fit)
   } else {
@@ -563,18 +515,6 @@ plot.recm_forecast <- function(x,
 
   pos <- pmax(cm, 0)
   neg <- pmin(cm, 0)
-  drawn <- if (type == "diff") paste0("d", x$variables$y) else x$variables$y
-  ylab <- if (type == "diff") {
-    drawn
-  } else {
-    paste0(x$variables$y, " since the forecast origin")
-  }
-  main_txt <- if (is.null(main)) {
-    paste0("Forecast of ", drawn, " and its contributions")
-  } else {
-    as.character(main)[1L]
-  }
-
   # The legends sit in the two top corners, so they need room above the
   # tallest stack or they are drawn over it.
   ylim <- range(0, colSums(pos), colSums(neg), total, finite = TRUE)
@@ -589,6 +529,10 @@ plot.recm_forecast <- function(x,
   )
   graphics::barplot(neg, col = cols, border = NA, add = TRUE, axes = FALSE,
                     axisnames = FALSE)
+  if (!is.null(sub_txt)) {
+    graphics::mtext(sub_txt, side = 3L, line = 0.2, cex = 0.75,
+                    col = pal$ref)
+  }
   graphics::abline(h = 0, col = pal$ref)
   graphics::lines(bp, total, col = pal$hi, lwd = 2)
   graphics::points(bp, total, pch = 16L, cex = 0.7, col = pal$hi)
@@ -596,12 +540,130 @@ plot.recm_forecast <- function(x,
   if (isTRUE(legend)) {
     graphics::legend("topleft", bty = "n", cex = 0.7, fill = cols,
                      border = "white", legend = rownames(cm))
-    graphics::legend(
-      "topright", bty = "n", cex = 0.7, lwd = 2, col = pal$hi,
-      legend = paste0("forecast ",
-                      if (type == "diff") paste0("d", x$variables$y) else
-                        x$variables$y)
-    )
+    graphics::legend("topright", bty = "n", cex = 0.7, lwd = 2, col = pal$hi,
+                     legend = line_lab)
   }
   invisible(x)
+}
+
+# Shared argument checking, so a typo is caught before anything is drawn.
+recm_check_plot_args <- function(type, legend) {
+  type <- match.arg(type, c("diff", "level"))
+  if (!is.logical(legend) || length(legend) != 1L || is.na(legend)) {
+    stop("`legend` must be TRUE or FALSE.", call. = FALSE)
+  }
+  type
+}
+
+#' Plot a rational error correction path and its contributions
+#'
+#' Stacked bars of the contribution of each term of the equation, with the
+#' total drawn over them. Contributions of opposite sign are stacked away from
+#' zero in opposite directions, so a term pulling against the total is visible
+#' as such.
+#'
+#' The two methods draw the same decomposition of the same recursion and differ
+#' only in what they call it: a forecast of \eqn{y} from [predict.recm()], a
+#' simulated path or an impulse response from [simulate.recm()]. For a response
+#' the bars and the line are deviations from baseline and the panel is centred
+#' on zero.
+#'
+#' @param x An object of class `"recm_forecast"` from [predict.recm()], or of
+#'   class `"recm_simulation"` from [simulate.recm()].
+#' @param type `"diff"`, the default, decomposes \eqn{\Delta y} period by
+#'   period. `"level"` decomposes \eqn{y} itself, as cumulated contributions
+#'   measured from the origin \eqn{y_T}; the bars and the line are then both
+#'   movements away from that origin, since \eqn{y_T} would otherwise set the
+#'   scale of the panel on its own. For an impulse response both are already
+#'   measured from zero.
+#' @param main Title. `NULL`, the default, describes the panel.
+#' @param col Fill colours, recycled over the terms. `NULL` spaces them around
+#'   the hue circle.
+#' @param legend Draw the two legends, naming the terms and the total.
+#' @param ... Further graphical parameters passed to [graphics::barplot()].
+#'
+#' @return `x`, invisibly.
+#'
+#' @seealso [predict.recm()], [simulate.recm()], [plot.recm()].
+#'
+#' @examples
+#' set.seed(1)
+#' n <- 300
+#' dystar <- as.numeric(stats::filter(rnorm(n, 0.5, 0.4), 0.6, "recursive"))
+#' ystar <- 100 + cumsum(dystar)
+#' y <- numeric(n)
+#' y[1] <- ystar[1]
+#' for (t in 2:n) {
+#'   y[t] <- y[t - 1] + 0.3 * (ystar[t - 1] - y[t - 1]) +
+#'     0.7 * dystar[t] + rnorm(1, 0, 0.1)
+#' }
+#' fit <- recm(y, ystar, data.frame(y = y, ystar = ystar))
+#'
+#' fc <- predict(fit, n_ahead = 12)
+#' plot(fc)
+#' plot(fc, type = "level")
+#'
+#' # The response to a permanent unit rise in the target, and the terms that
+#' # deliver it.
+#' plot(simulate(fit, n_ahead = 40, shock = recm_shock("ystar")))
+#'
+#' @export
+plot.recm_forecast <- function(x,
+                               type = c("diff", "level"),
+                               main = NULL,
+                               col = NULL,
+                               legend = TRUE,
+                               ...) {
+  type <- recm_check_plot_args(type, legend)
+  drawn <- if (type == "diff") paste0("d", x$variables$y) else x$variables$y
+  recm_draw_decomposition(
+    x, type, col, legend,
+    main_txt = if (is.null(main)) {
+      paste0("Forecast of ", drawn, " and its contributions")
+    } else {
+      as.character(main)[1L]
+    },
+    ylab = if (type == "diff") {
+      drawn
+    } else {
+      paste0(x$variables$y, " since the forecast origin")
+    },
+    line_lab = paste0("forecast ", drawn),
+    ...
+  )
+}
+
+#' @rdname plot.recm_forecast
+#' @export
+plot.recm_simulation <- function(x,
+                                 type = c("diff", "level"),
+                                 main = NULL,
+                                 col = NULL,
+                                 legend = TRUE,
+                                 ...) {
+  type <- recm_check_plot_args(type, legend)
+  drawn <- if (type == "diff") paste0("d", x$variables$y) else x$variables$y
+  shocked <- !is.null(x$shock)
+  recm_draw_decomposition(
+    x, type, col, legend,
+    main_txt = if (!is.null(main)) {
+      as.character(main)[1L]
+    } else if (shocked) {
+      paste0("Response of ", drawn, " to a shock to ", x$shock$variable)
+    } else {
+      paste0("Simulated ", drawn, " and its contributions")
+    },
+    ylab = if (shocked) {
+      paste0(drawn, ", deviation from baseline")
+    } else if (type == "diff") {
+      drawn
+    } else {
+      paste0(x$variables$y, " since the simulation origin")
+    },
+    line_lab = paste0(if (shocked) "response of " else "simulated ", drawn),
+    # The shock belongs above the panel, not in the line legend: the line is
+    # the response, and labelling it with the shock says the opposite.
+    sub_txt = if (shocked) recm_shock_label(x$shock) else NULL,
+    ...
+  )
 }

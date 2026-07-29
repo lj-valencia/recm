@@ -1,14 +1,17 @@
-## predict.recm() iterates the decision rule forward rather than predicting one
-## step ahead from realised data, so there are two separate things to check:
-## that the arithmetic of the decomposition is exact, and that the simulated
-## path obeys the properties the estimated model is supposed to have. The
-## balanced growth test below is the second kind, and is the one that would
-## catch a forward term wired to the wrong state.
+## predict.recm() forecasts by iterating the decision rule forward rather than
+## by predicting one step ahead from realised data, so there are two separate
+## things to check: that the arithmetic of the decomposition is exact, and that
+## the forecast path obeys the properties the estimated model is supposed to
+## have. The balanced growth test below is the second kind, and is the one that
+## would catch a forward term wired to the wrong state.
+##
+## The recursion itself lives in R/path.R and is shared with simulate.recm();
+## it is exercised here, through the plainer of the two entry points, and
+## test-simulate.R checks what simulate() adds to it.
 
 forecast_example <- function(n = 400L, seed = 41L, ...) {
-  df <- simulate_recm(n = n, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
-                      seed = seed, ...)
-  df
+  simulate_recm(n = n, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                seed = seed, ...)
 }
 
 test_that("the contributions add up, in differences and in levels", {
@@ -29,6 +32,33 @@ test_that("the contributions add up, in differences and in levels", {
   # The level is the forecast origin plus the accumulated differences.
   expect_equal(unname(fc$level), fc$base + cumsum(unname(fc$fit)))
   expect_equal(fc$base, df$y[nrow(df)])
+})
+
+test_that("predict defaults to one step ahead", {
+  df <- forecast_example(seed = 63L)
+  fit <- recm("y", "ystar", df)
+
+  one <- predict(fit)
+  expect_identical(one$horizon, 1L)
+  expect_equal(one$fit, predict(fit, n_ahead = 1L)$fit)
+  # The one step ahead forecast is the head of a longer one: nothing about the
+  # horizon changes the periods before it.
+  expect_equal(unname(one$fit), unname(predict(fit, n_ahead = 6L)$fit[1L]))
+})
+
+test_that("newdata sets the horizon unless n_ahead overrides it", {
+  df <- forecast_example(seed = 44L)
+  fit <- recm("y", "ystar", df)
+  n <- nrow(df)
+  nd <- data.frame(ystar = df$ystar[n] + cumsum(rep(0.4, 6)))
+
+  # With newdata and no n_ahead the horizon is the whole of newdata, not the
+  # default of one; an n_ahead the caller actually typed truncates it.
+  full <- predict(fit, newdata = nd)
+  expect_identical(full$horizon, 6L)
+  short <- predict(fit, newdata = nd, n_ahead = 3L)
+  expect_identical(short$horizon, 3L)
+  expect_equal(short$fit, full$fit[1:3])
 })
 
 test_that("the first forecast step is the estimated equation by hand", {
@@ -77,7 +107,7 @@ test_that("the autoregressive term is seeded with the last observed change", {
   expect_equal(unname(fc$contributions$dy_lag1[1L]),
                b * (df$y[n] - df$y[n - 1L]))
   # The second row uses the model's own first forecast difference, which is
-  # what makes this a simulation rather than a one step ahead prediction.
+  # what makes this a dynamic forecast rather than a one step ahead prediction.
   expect_equal(unname(fc$contributions$dy_lag1[2L]), b * unname(fc$fit[1L]))
 })
 
@@ -156,18 +186,6 @@ test_that("ts, matrix and data.frame newdata agree, and a y column is unused", {
   expect_equal(unname(predict(fit, newdata = with_y)$fit), unname(base_fc$fit))
 })
 
-test_that("n_ahead truncates newdata", {
-  df <- forecast_example(seed = 44L)
-  fit <- recm("y", "ystar", df)
-  n <- nrow(df)
-  nd <- data.frame(ystar = df$ystar[n] + cumsum(rep(0.4, 6)))
-
-  full <- predict(fit, newdata = nd)
-  short <- predict(fit, newdata = nd, n_ahead = 3L)
-  expect_identical(short$horizon, 3L)
-  expect_equal(short$fit, full$fit[1:3])
-})
-
 test_that("the first new difference of an exogenous regressor spans the join", {
   df <- forecast_example(seed = 44L, extra = 0.5)
   fit <- recm("y", "ystar", df)
@@ -215,7 +233,7 @@ test_that("predict refuses what it cannot forecast", {
   df <- forecast_example(n = 300L, seed = 48L)
   fit <- recm("y", "ystar", df)
 
-  expect_error(predict(fit), "nothing to forecast over")
+  expect_error(predict(fit, n_ahead = NULL), "nothing to iterate over")
   expect_error(predict(fit, n_ahead = 0), "positive whole number")
   expect_error(predict(fit, n_ahead = c(2, 3)), "positive whole number")
   expect_error(predict(fit, n_ahead = 2.5), "positive whole number")
@@ -226,6 +244,8 @@ test_that("predict refuses what it cannot forecast", {
   expect_error(predict(fit, newdata = data.frame(ystar = 1:3), n_ahead = 9L),
                "only 3 rows")
 
+  # A forecast needs a real path for anything it cannot project, and the
+  # auxiliary autoregression covers the target alone.
   dfw <- forecast_example(n = 300L, seed = 49L, extra = 0.5)
   fitw <- recm("y", "ystar", dfw)
   expect_error(predict(fitw, n_ahead = 5L), "cannot project")
@@ -260,9 +280,13 @@ test_that("print reports the horizon and the contributions", {
   fit <- recm("y", "ystar", df)
   fc <- predict(fit, n_ahead = 5L)
 
-  expect_output(print(fc), "Forecast from a rational error correction model")
+  expect_output(print(fc), "h-step ahead forecast")
   expect_output(print(fc), "horizon: 5")
   expect_output(print(fc), "projected from the auxiliary autoregression")
   # Nested so the printed frame does not leak into the test log.
   expect_output(expect_invisible(print(fc)))
+
+  n <- nrow(df)
+  cond <- predict(fit, newdata = data.frame(ystar = df$ystar[n] + 1:4))
+  expect_output(print(cond), "conditional on it")
 })

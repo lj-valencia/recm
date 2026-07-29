@@ -3,9 +3,9 @@
 \name{predict.recm}
 \alias{predict.recm}
 \alias{print.recm_forecast}
-\title{Forecast from a rational error correction model}
+\title{h-step ahead forecasts from a rational error correction model}
 \usage{
-\method{predict}{recm}(object, newdata = NULL, n_ahead = NULL, ...)
+\method{predict}{recm}(object, newdata = NULL, n_ahead = 1L, ...)
 
 \method{print}{recm_forecast}(x, digits = max(3L, getOption("digits") - 3L), ...)
 }
@@ -15,12 +15,15 @@
 \item{newdata}{Future values of the frictionless target `y_star` and of any
 exogenous regressors, under the names they were estimated with. A `ts`,
 `data.frame` or named numeric matrix, ordered in time and with no gaps.
-A column holding the decision variable is ignored; see Details.}
+`NULL`, the default, projects the target from the fitted auxiliary
+autoregression, which is possible only when the fit carries no exogenous
+regressors, as those cannot be projected. A column holding the decision
+variable is ignored; see Details.}
 
-\item{n_ahead}{Forecast horizon. Supplied with `newdata` it truncates it to
-the first `n_ahead` rows. Supplied on its own it projects the target from
-the fitted auxiliary autoregression, which is possible only when the fit
-carries no exogenous regressors, as those cannot be projected.}
+\item{n_ahead}{Forecast horizon \eqn{h}, a single positive whole number.
+Defaults to `1`, the one step ahead forecast. When `newdata` is supplied
+and `n_ahead` is not, the horizon is the number of rows of `newdata`;
+supplying both truncates `newdata` to its first `n_ahead` rows.}
 
 \item{...}{Ignored, present for consistency with the generic.}
 
@@ -31,38 +34,43 @@ carries no exogenous regressors, as those cannot be projected.}
 \value{
 An object of class `"recm_forecast"`, a list whose elements are
   \describe{
-    \item{`fit`}{The forecast of \eqn{\Delta y}, named by time index.}
-    \item{`level`}{The forecast of \eqn{y} itself.}
-    \item{`base`}{The forecast origin \eqn{y_T}, the last observation of
-      the decision variable in the estimation sample.}
-    \item{`contributions`}{A data frame with one row per horizon: the
+    \item{`fit`}{The forecast path of \eqn{\Delta y}, named by time index.}
+    \item{`level`}{The forecast path of \eqn{y} itself.}
+    \item{`base`}{The forecast origin \eqn{y_T}, the last observation of the
+      decision variable in the estimation sample.}
+    \item{`contributions`}{A data frame with one row per period: the
       horizon, the time index, one column per term of the equation, and
       `fit`, their sum.}
     \item{`levels`}{The same decomposition in levels: `base`, the
       cumulated term columns, and `fit`, the forecast level.}
     \item{`forward_term`}{\eqn{Z_t} over the horizon.}
     \item{`terms`}{Names of the term columns of both frames.}
+    \item{`projected`}{Whether the target was projected from the auxiliary
+      autoregression rather than supplied.}
   }
 }
 \description{
-Iterates the estimated decision rule forward and decomposes the result,
-term by term, into the contribution of each variable. Follows the
-[stats::predict()] conventions where they apply: `newdata` is optional and
-carries the future path of the right-hand side.
+Forecasts the decision variable over the next `n_ahead` periods by iterating
+the estimated decision rule forward from the end of the estimation sample,
+and decomposes the forecast, term by term, into the contribution of each
+variable.
 }
 \details{
-The forecast is a dynamic simulation, not a one step ahead conditional
-prediction. The decision variable is iterated forward from the end of the
-estimation sample: the error correction term at \eqn{t+h} is formed from
-the model's own \eqn{y_{t+h-1}}, and the lagged differences from its own
-\eqn{\Delta y}. A column of `newdata` holding the decision variable is
-therefore ignored rather than used, because using it would make the result
-a conditional prediction of something already known.
+The forecast is dynamic, not a sequence of one step ahead conditional
+predictions. The decision variable is iterated forward: the error correction
+term at \eqn{t+h} is formed from the model's own \eqn{y_{t+h-1}}, and the
+lagged differences from its own \eqn{\Delta y}. A column of `newdata`
+holding the decision variable is therefore ignored rather than used, because
+using it would make the result a prediction of something already known, and
+`predict(object)` does not reproduce [fitted()][recm-methods] in sample.
 
-The auxiliary autoregression is not re-estimated on `newdata`. The forward
-term uses the fitted \eqn{h} vector applied to states built from the new
-path of the target, which is what makes this a forecast from the fitted
-model rather than from a second, differently fitted one.
+Leaving `newdata` out gives the model's own forecast, with the target
+projected from the auxiliary autoregression. Supplying it gives a
+conditional forecast, on the path of the target you assume. Either way the
+auxiliary autoregression is not re-estimated: the forward term uses the
+fitted \eqn{h} vector applied to states built from the new path of the
+target, which is what makes this a forecast from the fitted model rather
+than from a second, differently fitted one.
 }
 \section{Contributions}{
 
@@ -78,11 +86,11 @@ decomposes the level too, since \eqn{y_{T+h} = y_T + \sum_{s \le h}
 \Delta y_{T+s}}, which is what `levels` holds, with the forecast origin
 \eqn{y_T} carried in its own `base` column.
 
-These are contributions to the simulated path, not partial derivatives. The
-error correction term is formed from the simulated \eqn{y}, so its column
-carries the feedback from every term that came before it, and holding one
-variable fixed and re-running the recursion would not move the total by
-that variable's contribution.
+These are contributions to the forecast, not partial derivatives. The error
+correction term is formed from the forecast \eqn{y}, so its column carries
+the feedback from every term that came before it, and holding one variable
+fixed and re-running the recursion would not move the total by that
+variable's contribution.
 
 No interval is reported. The standard errors the fit carries condition on
 the estimated auxiliary autoregression, and [summary.recm()][recm-methods]
@@ -104,18 +112,24 @@ for (t in 2:n) {
 }
 fit <- recm(y, ystar, data.frame(y = y, ystar = ystar))
 
-# Twelve periods ahead, with the target projected from the auxiliary model.
+# One step ahead, the default.
+predict(fit)$fit
+
+# Twelve periods, with the target projected from the auxiliary model.
 fc <- predict(fit, n_ahead = 12)
 fc
 
 # The contributions add up to the forecast, by construction.
 all.equal(rowSums(fc$contributions[, fc$terms]), unname(fc$fit))
 
-# A target path of your own, and the same decomposition in levels.
+# A conditional forecast, on a target path you assume.
 future <- data.frame(ystar = ystar[n] + cumsum(rep(0.5, 8)))
 head(predict(fit, newdata = future)$levels)
 
 }
 \seealso{
-[recm()], [plot.recm_forecast()], [stats::predict.lm()].
+[simulate.recm()], which iterates the same decision rule but for a
+  different purpose: over a path of your choosing, and with a shock, to
+  trace an impulse response rather than to forecast. [plot.recm_forecast()],
+  [recm()].
 }
