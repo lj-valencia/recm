@@ -69,7 +69,56 @@ test_that("remaining numeric columns enter as exogenous regressors", {
   expect_named(df, c("y", "ystar", "shock"))
   fit <- recm(y, ystar, df)
   expect_identical(fit$variables$w, "shock")
+  # tr_exog defaults to TRUE, so the column enters differenced and renamed.
+  expect_true(fit$tr_exog)
+  expect_identical(fit$variables$w_terms, "d_shock")
+  expect_equal(unname(coef(fit)[["d_shock"]]), 0.5, tolerance = 0.05)
+  # The design column really is the difference of the supplied one. The kept
+  # rows are the trailing ones, every dropped row being a leading NA.
+  expect_equal(unname(fit$model$x[, "d_shock"]),
+               utils::tail(diff(df$shock), fit$nobs), tolerance = 1e-12)
+})
+
+test_that("tr_exog = FALSE leaves the exogenous regressors in levels", {
+  df <- simulate_recm(n = 800L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      extra = 0.5, tr_exog = FALSE, seed = 5)
+  fit <- recm(y, ystar, df, tr_exog = FALSE)
+  expect_false(fit$tr_exog)
+  expect_identical(fit$variables$w_terms, "shock")
   expect_equal(unname(coef(fit)[["shock"]]), 0.5, tolerance = 0.05)
+
+  # Differencing a series the equation wants in levels does not recover it.
+  wrong <- recm(y, ystar, df)
+  expect_gt(abs(unname(coef(wrong)[["d_shock"]]) - 0.5), 0.1)
+
+  expect_error(recm(y, ystar, df, tr_exog = NA), "must be TRUE or FALSE")
+  expect_error(recm(y, ystar, df, tr_exog = c(TRUE, TRUE)),
+               "must be TRUE or FALSE")
+})
+
+test_that("a design name collision is named rather than silently resolved", {
+  df <- simulate_recm(n = 300L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 16)
+  # `ec` is the error correction term's own name, so in levels it collides.
+  clash <- cbind(df, ec = stats::rnorm(nrow(df)))
+  expect_error(recm(y, ystar, clash, tr_exog = FALSE), "duplicate column names")
+  expect_error(recm(y, ystar, cbind(df, dy_lag1 = stats::rnorm(nrow(df))),
+                    m = 2, tr_exog = FALSE), "duplicate column names")
+
+  # Differencing renames every regressor out of the way, so the collision
+  # cannot arise there: the `d_` prefix is injective and no reserved name
+  # carries it.
+  fit <- recm(y, ystar, clash)
+  expect_identical(fit$variables$w_terms, "d_ec")
+})
+
+test_that("a fit with no exogenous regressors carries no phantom term", {
+  df <- simulate_recm(n = 300L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 17)
+  fit <- recm(y, ystar, df)
+  # paste0("d_", character(0)) is "d_", not character(0).
+  expect_length(fit$variables$w_terms, 0L)
+  expect_identical(colnames(fit$model$x), "ec")
 })
 
 test_that("the fitted equation reproduces its own residuals", {
@@ -133,6 +182,28 @@ test_that("print and summary run without error", {
   expect_output(print(summary(fit)), "Growth neutrality")
   expect_output(print(summary(fit)), "Auxiliary model")
   expect_output(print(summary(fit)), "Forward loading")
+  expect_output(print(summary(fit)), "R-squared \\(uncentered\\)")
+})
+
+test_that("the reported R-squared is the uncentered one", {
+  df <- simulate_recm(n = 400L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 21)
+  fit <- recm(y, ystar, df)
+  dy <- fit$model$dy
+
+  # Fitted plus residual reconstructs the differenced sample, and the ratio is
+  # taken about zero rather than about mean(dy) because no intercept is fitted.
+  expect_equal(unname(fitted(fit) + residuals(fit)), dy, tolerance = 1e-12)
+  expect_equal(fit$r.squared, 1 - fit$ssr / sum(dy^2), tolerance = 1e-12)
+  expect_equal(fit$adj.r.squared,
+               1 - (1 - fit$r.squared) * fit$nobs / fit$df.residual,
+               tolerance = 1e-12)
+
+  # The drift is left in, so the uncentered measure sits above the centered
+  # one it is deliberately not.
+  centered <- 1 - fit$ssr / sum((dy - mean(dy))^2)
+  expect_gt(fit$r.squared, centered)
+  expect_gt(fit$r.squared, 0.9)
 })
 
 test_that("the forward loading is reported both ways, without a test", {
