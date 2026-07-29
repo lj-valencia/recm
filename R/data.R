@@ -103,11 +103,21 @@ as_model_data <- function(data) {
 # so the design is the error correction term, m-1 lags of dy, and the columns
 # of W dated t. No intercept: a free constant is inconsistent with growth
 # neutrality, and the auxiliary autoregression carries the drift instead.
-build_design <- function(x, y_name, ystar_name, m) {
+#
+# `tr_exog` differences W as y and y_star are differenced, and renames the
+# column so the coefficient label states the transform. The dependent variable
+# is a difference, so a level regressor is a different object from the rest of
+# the equation: were W trending it would put a trend into dy and break the
+# growth neutrality the restriction is there to enforce. Differencing costs no
+# observations, since the first row is already lost to dy.
+build_design <- function(x, y_name, ystar_name, m, tr_exog) {
   n <- nrow(x)
   y <- x[, y_name]
   ystar <- x[, ystar_name]
   w_names <- setdiff(colnames(x), c(y_name, ystar_name))
+  # Guarded on length: paste0("d_", character(0)) recycles to "d_" rather than
+  # returning nothing, which would invent a regressor when there are none.
+  w_terms <- if (tr_exog && length(w_names)) paste0("d_", w_names) else w_names
 
   lag_vec <- function(v, k) c(rep(NA_real_, k), v[seq_len(n - k)])
 
@@ -123,14 +133,28 @@ build_design <- function(x, y_name, ystar_name, m) {
       nms <- c(nms, paste0("dy_lag", i))
     }
   }
-  for (nm in w_names) {
-    cols[[length(cols) + 1L]] <- x[, nm]
-    nms <- c(nms, nm)
+  for (k in seq_along(w_names)) {
+    wk <- x[, w_names[k]]
+    cols[[length(cols) + 1L]] <- if (tr_exog) c(NA_real_, diff(wk)) else wk
+    nms <- c(nms, w_terms[k])
+  }
+
+  # A duplicate here would make coef()[["name"]] silently return the wrong
+  # column, so name the offender rather than let it through.
+  if (anyDuplicated(nms)) {
+    stop(
+      "the design has duplicate column names (",
+      paste(unique(nms[duplicated(nms)]), collapse = ", "),
+      "). Rename the offending column of `data`: the error correction term is ",
+      "called `ec`, the lags of the dependent variable `dy_lag1` and so on, ",
+      "and with `tr_exog = TRUE` each exogenous regressor is prefixed `d_`.",
+      call. = FALSE
+    )
   }
 
   design <- matrix(unlist(cols), nrow = n, ncol = length(cols))
   colnames(design) <- nms
 
   list(dy = dy, dystar = dystar, x = design, w_names = w_names,
-       y = y, ystar = ystar)
+       w_terms = w_terms, y = y, ystar = ystar)
 }

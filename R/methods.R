@@ -55,7 +55,8 @@ recm_equation <- function(object, digits = 4L) {
     }
   }
   parts <- c(parts, "Z[t]")
-  for (nm in v$w) {
+  # w_terms carries the transform: `d_oil` when tr_exog differenced it.
+  for (nm in v$w_terms) {
     parts <- c(parts, sprintf(
       "%s * %s[t]", format(cf[[nm]], digits = digits), nm
     ))
@@ -81,6 +82,13 @@ print.recm <- function(x, digits = max(3L, getOption("digits") - 3L), ...) {
     "  observations: %d   residual std. error: %s\n",
     x$nobs, format(sqrt(x$sigma2), digits = digits)
   ))
+  if (length(x$variables$w)) {
+    cat(sprintf(
+      "  exogenous: %s, entered in %s\n",
+      paste(x$variables$w, collapse = ", "),
+      if (x$tr_exog) "first differences" else "levels"
+    ))
+  }
   invisible(x)
 }
 
@@ -112,6 +120,19 @@ print.summary.recm <- function(x, digits = max(3L, getOption("digits") - 3L),
     "not a small matter: with the target process resampled too, they came in\n",
     "at roughly a third of the true sampling standard deviation. Bootstrap\n",
     "the auxiliary model before believing an interval.\n",
+    sep = ""
+  )
+
+  cat("\nFit, d", obj$variables$y, " against its fitted value:\n", sep = "")
+  cat(sprintf("  R-squared (uncentered)  %s   adjusted  %s\n",
+              format(obj$r.squared, digits = digits),
+              format(obj$adj.r.squared, digits = digits)))
+  cat(
+    "  Uncentered because no intercept is fitted: the total sum of squares\n",
+    "  is taken about zero, not about mean(d", obj$variables$y, ").\n",
+    "  The drift in the target therefore counts as explained variation, so\n",
+    "  this number is not comparable with an R-squared from an equation\n",
+    "  carrying a constant.\n",
     sep = ""
   )
 

@@ -158,8 +158,31 @@ cost_params <- function(alpha, beta) {
        residual = max(abs(as.numeric(mat %*% k) - rhs)))
 }
 
-# Half-life of the error correction gap, in periods, from the deterministic
-# response to a unit gap with the target held flat.
+# Deterministic response of the error correction gap to a unit gap, with the
+# target held flat: the path ystar - y would follow if the equation were run
+# forward from a one-off displacement and nothing else ever happened.
+#
+# Returned including the initial gap, so the result has h + 1 elements and
+# element i + 1 is the gap after i periods.
+gap_path <- function(a, h) {
+  m <- length(a)
+  gap <- 1
+  dy <- numeric(m)
+  out <- numeric(h + 1L)
+  out[1L] <- gap
+  for (i in seq_len(h)) {
+    step <- a[1L] * gap
+    if (m > 1L) {
+      step <- step + sum(a[-1L] * dy[seq_len(m - 1L)])
+    }
+    dy <- c(step, dy[-length(dy)])
+    gap <- gap - step
+    out[i + 1L] <- gap
+  }
+  out
+}
+
+# Half-life of the error correction gap, in periods, from that same response.
 #
 # Interpolated across the crossing rather than reported as the first integer
 # that clears it: an integer crossing has zero derivative and would return a
@@ -167,29 +190,22 @@ cost_params <- function(alpha, beta) {
 # log-linear where the gap is still positive, which is exact at m = 1, and
 # falls back to linear if the response overshoots through zero.
 half_life <- function(a, max_h = 1000L) {
-  m <- length(a)
-  gap <- 1
-  dy <- numeric(m)
-  prev <- 1
-  for (h in seq_len(max_h)) {
-    step <- a[1L] * gap
-    if (m > 1L) {
-      step <- step + sum(a[-1L] * dy[seq_len(m - 1L)])
-    }
-    dy <- c(step, dy[-length(dy)])
-    gap <- gap - step
-    if (gap <= 0.5) {
-      if (isTRUE(all.equal(prev, gap))) {
-        return(h)
-      }
-      share <- if (gap > 0) {
-        (log(prev) - log(0.5)) / (log(prev) - log(gap))
-      } else {
-        (prev - 0.5) / (prev - gap)
-      }
-      return(h - 1 + share)
-    }
-    prev <- gap
+  path <- gap_path(a, max_h)
+  below <- which(path <= 0.5)
+  if (!length(below)) {
+    return(NA_real_)
   }
-  NA_real_
+  # path[1] is the gap at h = 0, so index i is period i - 1.
+  h <- below[1L] - 1L
+  gap <- path[h + 1L]
+  prev <- path[h]
+  if (isTRUE(all.equal(prev, gap))) {
+    return(h)
+  }
+  share <- if (gap > 0) {
+    (log(prev) - log(0.5)) / (log(prev) - log(gap))
+  } else {
+    (prev - 0.5) / (prev - gap)
+  }
+  h - 1 + share
 }

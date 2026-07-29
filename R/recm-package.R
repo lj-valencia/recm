@@ -1,3 +1,11 @@
+## Both imports below are load-bearing and neither is decorative. Registering
+## an S3 method requires the generic to be resolvable as the namespace loads,
+## and R only finds it without an import when the generic is one of base R's
+## .knownS3Generics - which print, plot, predict, summary, coef and the rest
+## are, but nobs and simulate are not. Dropping either name here does not fail
+## at lint or at build; it fails at load, as three R CMD check WARNINGs
+## reading "object 'simulate' not found whilst loading namespace 'recm'".
+
 #' recm: Rational Error Correction Models
 #'
 #' Estimation of rational error correction (REC) models, the econometric
@@ -23,5 +31,5 @@
 #'
 #' @keywords internal
 #'
-#' @importFrom stats nobs
+#' @importFrom stats nobs simulate
 "_PACKAGE"

@@ -11,7 +11,8 @@ recm(
   expectations = c("var", "mce"),
   method = c("ols", "nls", "gmm"),
   m = 1,
-  discount = 1
+  discount = 1,
+  tr_exog = TRUE
 )
 }
 \arguments{
@@ -49,6 +50,12 @@ is never truncated.}
 estimated. Must lie in \eqn{(0, 1]}. At the default `discount = 1` the
 equation is growth neutral for any coefficients and any `m`, so the
 restriction described below is slack.}
+
+\item{tr_exog}{Difference the exogenous regressors, as `y` and `y_star` are
+differenced. `TRUE`, the default, enters each of them as \eqn{\Delta W_t}
+and labels the coefficient `d_<name>`. Set it to `FALSE` only for a
+regressor that genuinely belongs in the equation in levels, such as a
+dummy or a stationary spread; see the section below.}
 }
 \value{
 An object of class `"recm"`. Use [summary()][summary.recm] for the
@@ -58,6 +65,13 @@ An object of class `"recm"`. Use [summary()][summary.recm] for the
   `growth` (the neutrality gap and whether it was imposed), `aux` (the
   auxiliary autoregression) and `forward_loading` (the free versus
   restricted total forward loading).
+
+  `r.squared` and `adj.r.squared` compare \eqn{\Delta y} with its fitted
+  value. Both are uncentered, dividing by \eqn{\sum \Delta y_t^2} rather
+  than by the sum of squared deviations from \eqn{\overline{\Delta y}},
+  because no intercept is fitted. The drift in the target counts as
+  explained variation, so neither is comparable with an R-squared from an
+  equation carrying a constant.
 }
 \description{
 Fits the rational error correction (REC) representation of polynomial
@@ -87,6 +101,20 @@ linearised at each zig-zag sweep, which is exact at the fixed point.
 At `discount = 1` the restriction holds identically and is not imposed. At
 `discount < 1` with `m = 1` it degenerates: \eqn{R(a_0) = 0} forces
 \eqn{a_0 = 1}, instantaneous adjustment, so that combination is refused.
+}
+
+\section{Exogenous regressors}{
+
+The dependent variable is a difference, so an exogenous regressor left in
+levels is not the same kind of object as the rest of the equation. If such a
+regressor trends, it puts a trend into \eqn{\Delta y} and the equation is no
+longer growth neutral whatever the coefficients do, which defeats the
+restriction above. `tr_exog = TRUE` therefore differences them by default.
+
+`tr_exog = FALSE` is right when the regressor is already stationary and its
+level is the economically meaningful quantity: a dummy, a spread, a gap. It
+applies to all of them at once, so mixed cases are handled by differencing
+the relevant columns in `data` beforehand and passing `FALSE`.
 }
 
 \section{Standard errors}{

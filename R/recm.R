@@ -25,6 +25,11 @@
 #'   taken as the time index. No intercept is fitted: a free constant is
 #'   inconsistent with growth neutrality, and the auxiliary autoregression
 #'   carries the drift instead.
+#' @param tr_exog Difference the exogenous regressors, as `y` and `y_star` are
+#'   differenced. `TRUE`, the default, enters each of them as \eqn{\Delta W_t}
+#'   and labels the coefficient `d_<name>`. Set it to `FALSE` only for a
+#'   regressor that genuinely belongs in the equation in levels, such as a
+#'   dummy or a stationary spread; see the section below.
 #' @param expectations How expectations of the target are formed. `"var"`
 #'   (default) uses the auxiliary univariate autoregression with information
 #'   dated \eqn{t-1}, giving \eqn{Z_t = h' z_{t-1}} in closed form. `"mce"`
@@ -55,6 +60,18 @@
 #' `discount < 1` with `m = 1` it degenerates: \eqn{R(a_0) = 0} forces
 #' \eqn{a_0 = 1}, instantaneous adjustment, so that combination is refused.
 #'
+#' @section Exogenous regressors:
+#' The dependent variable is a difference, so an exogenous regressor left in
+#' levels is not the same kind of object as the rest of the equation. If such a
+#' regressor trends, it puts a trend into \eqn{\Delta y} and the equation is no
+#' longer growth neutral whatever the coefficients do, which defeats the
+#' restriction above. `tr_exog = TRUE` therefore differences them by default.
+#'
+#' `tr_exog = FALSE` is right when the regressor is already stationary and its
+#' level is the economically meaningful quantity: a dummy, a spread, a gap. It
+#' applies to all of them at once, so mixed cases are handled by differencing
+#' the relevant columns in `data` beforehand and passing `FALSE`.
+#'
 #' @section Standard errors:
 #' The fixed point solves \eqn{X'(\Delta y - X\gamma - Z(a)) = 0}, which is
 #' just-identified GMM with the regressors as their own instruments. The
@@ -75,6 +92,13 @@
 #'   `growth` (the neutrality gap and whether it was imposed), `aux` (the
 #'   auxiliary autoregression) and `forward_loading` (the free versus
 #'   restricted total forward loading).
+#'
+#'   `r.squared` and `adj.r.squared` compare \eqn{\Delta y} with its fitted
+#'   value. Both are uncentered, dividing by \eqn{\sum \Delta y_t^2} rather
+#'   than by the sum of squared deviations from \eqn{\overline{\Delta y}},
+#'   because no intercept is fitted. The drift in the target counts as
+#'   explained variation, so neither is comparable with an R-squared from an
+#'   equation carrying a constant.
 #'
 #' @references
 #' Tinsley, P. A. (2002). Rational error correction. *Computational
@@ -99,7 +123,8 @@ recm <- function(y, y_star, data,
                  expectations = c("var", "mce"),
                  method = c("ols", "nls", "gmm"),
                  m = 1,
-                 discount = 1) {
+                 discount = 1,
+                 tr_exog = TRUE) {
   cl <- match.call()
   expectations <- match.arg(expectations)
   method <- match.arg(method)
@@ -125,6 +150,10 @@ recm <- function(y, y_star, data,
   }
   beta <- as.numeric(discount)
 
+  if (!is.logical(tr_exog) || length(tr_exog) != 1L || is.na(tr_exog)) {
+    stop("`tr_exog` must be TRUE or FALSE.", call. = FALSE)
+  }
+
   md <- as_model_data(data)
   cols <- colnames(md$x)
   env <- parent.frame()
@@ -143,7 +172,7 @@ recm <- function(y, y_star, data,
     )
   }
 
-  des <- build_design(md$x, y_name, ystar_name, m)
+  des <- build_design(md$x, y_name, ystar_name, m, tr_exog)
   aux <- fit_aux_var(des$dystar)
   n <- nrow(md$x)
 
@@ -213,6 +242,14 @@ recm <- function(y, y_star, data,
   sigma2 <- fit$ssr / df_resid
   se <- sqrt(pmax(diag(vc$vcov), 0))
 
+  # Uncentered: no intercept is fitted, so the total sum of squares is taken
+  # about zero rather than about mean(dy), and the drift in dy counts as
+  # explained variation. summary.lm() makes the same choice for a formula
+  # without a constant, and the adjustment uses tt rather than tt - 1 for the
+  # same reason.
+  r2 <- 1 - fit$ssr / sum(dy_est^2)
+  adj_r2 <- 1 - (1 - r2) * tt / df_resid
+
   d <- lead_weights(alg, 40L)
   costs <- cost_params(alg$alpha, beta)
   g_drift <- aux$mean
@@ -259,6 +296,7 @@ recm <- function(y, y_star, data,
       expectations = expectations,
       m = m,
       discount = beta,
+      tr_exog = tr_exog,
       coefficients = gamma,
       vcov = vc$vcov,
       std.error = stats::setNames(se, names(gamma)),
@@ -270,6 +308,8 @@ recm <- function(y, y_star, data,
       df.residual = df_resid,
       sigma2 = sigma2,
       ssr = fit$ssr,
+      r.squared = r2,
+      adj.r.squared = adj_r2,
       residuals = stats::setNames(fit$residuals, md$index[keep]),
       fitted.values = stats::setNames(dy_est - fit$residuals, md$index[keep]),
       forward_term = stats::setNames(fit$z, md$index[keep]),
@@ -304,8 +344,13 @@ recm <- function(y, y_star, data,
       criterion = fit$criterion,
       nobs = tt,
       index = md$index[keep],
-      variables = list(y = y_name, y_star = ystar_name, w = des$w_names),
-      model = list(dy = dy_est, x = x_est)
+      variables = list(y = y_name, y_star = ystar_name, w = des$w_names,
+                       w_terms = des$w_terms),
+      # `data` and `index` are the whole sample, not the estimation rows:
+      # predict() iterates the decision rule forward from the end of it and
+      # needs y and y_star in levels, plus the last level of each exogenous
+      # regressor to difference the first new one against.
+      model = list(dy = dy_est, x = x_est, data = md$x, index = md$index)
     ),
     class = "recm"
   )

@@ -10,6 +10,14 @@
 ## therefore with the error correction term, so a series generated one way
 ## must not be used to test the other branch.
 
+# Draw on a throwaway null device and return whatever the expression returned,
+# so nothing reaches the disk and nothing depends on a display being available.
+on_null_device <- function(expr) {
+  grDevices::pdf(NULL)
+  on.exit(grDevices::dev.off(), add = TRUE)
+  force(expr)
+}
+
 # The companion matrix of a stationary AR(p) with a constant, matching the
 # layout fit_aux_var() builds.
 make_companion <- function(const, ar) {
@@ -41,7 +49,7 @@ simulate_target <- function(nn, ar, const, sd_target) {
 simulate_recm <- function(n, a, beta, ar, const,
                           expectations = c("var", "mce"),
                           sd_target = 0.3, sd_eq = 0.05, burn = 200L,
-                          extra = NULL, seed = NULL) {
+                          extra = NULL, tr_exog = TRUE, seed = NULL) {
   expectations <- match.arg(expectations)
   if (!is.null(seed)) {
     set.seed(seed)
@@ -68,7 +76,14 @@ simulate_recm <- function(n, a, beta, ar, const,
     }
   }
 
-  w <- if (is.null(extra)) NULL else stats::rnorm(nn, 0, 1)
+  # The exogenous regressor is generated to match the transform under test:
+  # an I(1) level whose change drives dy when tr_exog differences it, a
+  # stationary series entering in levels when it does not.
+  w <- NULL
+  if (!is.null(extra)) {
+    w <- if (tr_exog) cumsum(stats::rnorm(nn, 0, 1)) else stats::rnorm(nn, 0, 1)
+    w_effect <- if (tr_exog) c(0, diff(w)) else w
+  }
   start <- p + m + 2L
   y <- numeric(nn)
   dy <- numeric(nn)
@@ -80,7 +95,7 @@ simulate_recm <- function(n, a, beta, ar, const,
       step <- step + sum(a[-1L] * dy[(t - 1L):(t - m + 1L)])
     }
     if (!is.null(w)) {
-      step <- step + extra * w[t]
+      step <- step + extra * w_effect[t]
     }
     dy[t] <- step
     y[t] <- y[t - 1L] + step
