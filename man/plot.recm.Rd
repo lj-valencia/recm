@@ -19,38 +19,38 @@
 )
 }
 \arguments{
-\item{x}{An object of class `"recm"` returned by [recm()].}
+\item{x}{An object of class \code{"recm"} returned by \code{\link[=recm]{recm()}}.}
 
-\item{which}{Integer vector selecting panels from `1:9`; see below.
-Defaults to `1:4`.}
+\item{which}{Integer vector selecting panels from \code{1:9}; see below.
+Defaults to \code{1:4}.}
 
 \item{caption}{Titles for the nine panels, recycled to length nine.}
 
 \item{main}{Title actually used, recycled over the selected panels.
-`NULL`, the default, takes the titles from `caption`.}
+\code{NULL}, the default, takes the titles from \code{caption}.}
 
 \item{horizon}{Horizon for the lead weight panels (3 and 4) and the
-adjustment path (9). `NULL`, the default, stops each of them where the
+adjustment path (9). \code{NULL}, the default, stops each of them where the
 sequence has decayed to nothing, so a fast adjustment is not drawn as a
 spike followed by a long flat stretch.}
 
 \item{lag_max}{Highest lag shown in the residual autocorrelation panel.
-`NULL` uses `stats::acf()`'s own rule.}
+\code{NULL} uses \code{stats::acf()}'s own rule.}
 
 \item{id_n}{Number of extreme residuals labelled with their time index in
 panels 1, 5 and 6. Zero labels none.}
 
-\item{ask}{Pause between panels. Defaults to `TRUE` when more panels were
+\item{ask}{Pause between panels. Defaults to \code{TRUE} when more panels were
 asked for than the current layout can hold and the device is interactive,
-which is [plot.lm()]'s rule.}
+which is \code{\link[=plot.lm]{plot.lm()}}'s rule.}
 
 \item{...}{Further graphical parameters passed to the underlying plot.}
 }
 \value{
-`x`, invisibly.
+\code{x}, invisibly.
 }
 \description{
-Nine panels, selected by `which`, in the manner of [plot.lm()]. The first
+Nine panels, selected by \code{which}, in the manner of \code{\link[=plot.lm]{plot.lm()}}. The first
 four are drawn by default: two residual diagnostics and the two views of
 the estimated lead weights.
 }
@@ -58,31 +58,31 @@ the estimated lead weights.
 The lead weights are the reason the last group of panels exists. They are
 not estimated freely - they are a nonlinear function of the reduced-form
 coefficients through \eqn{A(L)} - so their shape is what the cross-equation
-restrictions actually deliver, and `sum(d_i)` together with the mean lead
+restrictions actually deliver, and \code{sum(d_i)} together with the mean lead
 does not convey it.
 }
 \section{Panels}{
 
 \describe{
-  \item{1}{Residuals against fitted \eqn{\Delta y}, with a lowess smooth.}
-  \item{2}{Histogram of the residuals, against the normal density implied
-    by the reported residual standard error and a kernel estimate. The
-    reference normal is centred at zero, not at the residual mean: no
-    intercept is fitted, so a visible shift is worth seeing.}
-  \item{3}{Lead weights \eqn{d_i} against the horizon, with the mean lead
-    marked.}
-  \item{4}{Cumulative lead weights as a share of \eqn{\sum_i d_i}, with the
-    horizons carrying half and nine tenths of the forward response marked.
-    If the total loading is zero the raw cumulative sum is drawn instead.}
-  \item{5}{Residuals through the sample, with a two standard error band.}
-  \item{6}{Normal quantile plot of the standardised residuals.}
-  \item{7}{Residual autocorrelation with its \eqn{\pm 1.96/\sqrt{T}} bands
-    and the HAC bandwidth used by the reported standard errors.}
-  \item{8}{\eqn{\Delta y} and its fitted value through the sample.}
-  \item{9}{Deterministic response of the error correction gap to a unit
-    displacement with the target held flat, with the half-life marked. At
-    `m > 1` this path need not be monotone, which the half-life alone
-    cannot say.}
+\item{1}{Residuals against fitted \eqn{\Delta y}, with a lowess smooth.}
+\item{2}{Histogram of the residuals, against the normal density implied
+by the reported residual standard error and a kernel estimate. The
+reference normal is centred at zero, not at the residual mean: no
+intercept is fitted, so a visible shift is worth seeing.}
+\item{3}{Lead weights \eqn{d_i} against the horizon, with the mean lead
+marked.}
+\item{4}{Cumulative lead weights as a share of \eqn{\sum_i d_i}, with the
+horizons carrying half and nine tenths of the forward response marked.
+If the total loading is zero the raw cumulative sum is drawn instead.}
+\item{5}{Residuals through the sample, with a two standard error band.}
+\item{6}{Normal quantile plot of the standardised residuals.}
+\item{7}{Residual autocorrelation with its \eqn{\pm 1.96/\sqrt{T}} bands
+and the HAC bandwidth used by the reported standard errors.}
+\item{8}{\eqn{\Delta y} and its fitted value through the sample.}
+\item{9}{Deterministic response of the error correction gap to a unit
+displacement with the target held flat, with the half-life marked. At
+\code{m > 1} this path need not be monotone, which the half-life alone
+cannot say.}
 }
 }
 
@@ -108,5 +108,5 @@ plot(fit, which = c(3, 4, 9), ask = FALSE)
 
 }
 \seealso{
-[recm()], [summary.recm()][recm-methods].
+\code{\link[=recm]{recm()}}, \link[=recm-methods]{summary.recm()}.
 }

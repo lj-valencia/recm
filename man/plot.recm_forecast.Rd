@@ -10,27 +10,27 @@
 \method{plot}{recm_simulation}(x, type = c("diff", "level"), main = NULL, col = NULL, legend = TRUE, ...)
 }
 \arguments{
-\item{x}{An object of class `"recm_forecast"` from [predict.recm()], or of
-class `"recm_simulation"` from [simulate.recm()].}
+\item{x}{An object of class \code{"recm_forecast"} from \code{\link[=predict.recm]{predict.recm()}}, or of
+class \code{"recm_simulation"} from \code{\link[=simulate.recm]{simulate.recm()}}.}
 
-\item{type}{`"diff"`, the default, decomposes \eqn{\Delta y} period by
-period. `"level"` decomposes \eqn{y} itself, as cumulated contributions
+\item{type}{\code{"diff"}, the default, decomposes \eqn{\Delta y} period by
+period. \code{"level"} decomposes \eqn{y} itself, as cumulated contributions
 measured from the origin \eqn{y_T}; the bars and the line are then both
 movements away from that origin, since \eqn{y_T} would otherwise set the
 scale of the panel on its own. For an impulse response both are already
 measured from zero.}
 
-\item{main}{Title. `NULL`, the default, describes the panel.}
+\item{main}{Title. \code{NULL}, the default, describes the panel.}
 
-\item{col}{Fill colours, recycled over the terms. `NULL` spaces them around
+\item{col}{Fill colours, recycled over the terms. \code{NULL} spaces them around
 the hue circle.}
 
 \item{legend}{Draw the two legends, naming the terms and the total.}
 
-\item{...}{Further graphical parameters passed to [graphics::barplot()].}
+\item{...}{Further graphical parameters passed to \code{\link[graphics:barplot]{graphics::barplot()}}.}
 }
 \value{
-`x`, invisibly.
+\code{x}, invisibly.
 }
 \description{
 Stacked bars of the contribution of each term of the equation, with the
@@ -40,8 +40,8 @@ as such.
 }
 \details{
 The two methods draw the same decomposition of the same recursion and differ
-only in what they call it: a forecast of \eqn{y} from [predict.recm()], a
-simulated path or an impulse response from [simulate.recm()]. For a response
+only in what they call it: a forecast of \eqn{y} from \code{\link[=predict.recm]{predict.recm()}}, a
+simulated path or an impulse response from \code{\link[=simulate.recm]{simulate.recm()}}. For a response
 the bars and the line are deviations from baseline and the panel is centred
 on zero.
 }
@@ -68,5 +68,5 @@ plot(simulate(fit, n_ahead = 40, shock = recm_shock("ystar")))
 
 }
 \seealso{
-[predict.recm()], [simulate.recm()], [plot.recm()].
+\code{\link[=predict.recm]{predict.recm()}}, \code{\link[=simulate.recm]{simulate.recm()}}, \code{\link[=plot.recm]{plot.recm()}}.
 }
