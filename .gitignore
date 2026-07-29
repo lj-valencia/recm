@@ -9,3 +9,4 @@ src/*.so
 src/*.dll
 reference
 data-raw
+CLAUDE.md
