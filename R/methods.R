@@ -83,10 +83,16 @@ print.recm <- function(x, digits = max(3L, getOption("digits") - 3L), ...) {
     x$nobs, format(sqrt(x$sigma2), digits = digits)
   ))
   if (length(x$variables$w)) {
+    # Named one by one rather than as a group: the transform is decided per
+    # regressor, so a dummy sits in levels beside a differenced neighbour.
+    wd <- x$variables$w_diff
+    if (is.null(wd)) {
+      wd <- rep(x$tr_exog, length(x$variables$w))
+    }
     cat(sprintf(
-      "  exogenous: %s, entered in %s\n",
-      paste(x$variables$w, collapse = ", "),
-      if (x$tr_exog) "first differences" else "levels"
+      "  exogenous: %s\n",
+      paste0(x$variables$w, " (",
+             ifelse(wd, "first difference", "level"), ")", collapse = ", ")
     ))
   }
   invisible(x)

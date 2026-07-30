@@ -252,7 +252,7 @@ plot(fc, type = "level")           # the same, cumulated
 | `discount` | `1` | The discount factor $\beta$, calibrated and never estimated. Must lie in $(0, 1]$. |
 | `expectations` | `"var"` | `"var"` uses an auxiliary univariate autoregression with information dated $t-1$, giving $Z_t$ in closed form. `"mce"` uses model consistent expectations on the realised target path. |
 | `method` | `"ols"` | Only the FRB/US iterative OLS zig-zag is implemented. `"nls"` and `"gmm"` are accepted by the signature and error informatively. |
-| `tr_exog` | `TRUE` | Enters exogenous regressors as $\Delta W_t$. Set `FALSE` only when the regressor is genuinely stationary in levels (a dummy, a spread, a gap). It applies to all of them at once. |
+| `tr_exog` | `TRUE` | Enters exogenous regressors as $\Delta W_t$, except dummy variables, which are detected and left in levels under their own names. Set `FALSE` when a regressor is genuinely stationary in levels (a spread, a gap, a rate); that applies to all of them at once. |
 
 ### Growth neutrality
 

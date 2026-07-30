@@ -25,10 +25,11 @@ estimated. Also a bare column name of \code{data}.}
 \item{data}{A \code{ts}/\code{mts}, \code{data.frame} (tibbles and data tables qualify) or
 named numeric matrix holding \code{y}, \code{y_star}, and any exogenous regressors.
 \strong{Every remaining numeric column is used as an exogenous regressor}
-\eqn{W_t}, dated \eqn{t}. At most one non-numeric column is allowed and is
-taken as the time index. No intercept is fitted: a free constant is
-inconsistent with growth neutrality, and the auxiliary autoregression
-carries the drift instead.}
+\eqn{W_t}, dated \eqn{t}. A logical column counts as numeric and is
+converted to a 0/1 dummy. At most one genuinely non-numeric column is
+allowed and is taken as the time index. No intercept is fitted: a free
+constant is inconsistent with growth neutrality, and the auxiliary
+autoregression carries the drift instead.}
 
 \item{expectations}{How expectations of the target are formed. \code{"var"}
 (default) uses the auxiliary univariate autoregression with information
@@ -53,9 +54,9 @@ restriction described below is slack.}
 
 \item{tr_exog}{Difference the exogenous regressors, as \code{y} and \code{y_star} are
 differenced. \code{TRUE}, the default, enters each of them as \eqn{\Delta W_t}
-and labels the coefficient \verb{d_<name>}. Set it to \code{FALSE} only for a
-regressor that genuinely belongs in the equation in levels, such as a
-dummy or a stationary spread; see the section below.}
+and labels the coefficient \verb{d_<name>} — except for dummy variables, which
+are recognised and left in levels under their own names. \code{FALSE} puts
+every regressor in levels, dummy or not. See the section below.}
 }
 \value{
 An object of class \code{"recm"}. Use \link[=summary.recm]{summary()} for the
@@ -111,10 +112,27 @@ regressor trends, it puts a trend into \eqn{\Delta y} and the equation is no
 longer growth neutral whatever the coefficients do, which defeats the
 restriction above. \code{tr_exog = TRUE} therefore differences them by default.
 
-\code{tr_exog = FALSE} is right when the regressor is already stationary and its
-level is the economically meaningful quantity: a dummy, a spread, a gap. It
-applies to all of them at once, so mixed cases are handled by differencing
-the relevant columns in \code{data} beforehand and passing \code{FALSE}.
+Dummy variables are the exception, and are the one case the function
+settles for itself. A column whose observed values are all 0 or 1, with both
+present, is entered in levels even under \code{tr_exog = TRUE}, and keeps its own
+name rather than gaining the \code{d_} prefix. A dummy cannot trend, so the
+argument above does not apply to it, and differencing one destroys what it
+is for: a 0/1 indicator differences to a pair of opposite spikes at its
+edges and nothing in between, which shifts \eqn{\Delta y} in the two
+boundary periods rather than over the episode the dummy marks. The decision
+is taken per column, so a dummy and a differenced regressor coexist without
+either being transformed on the other's terms. \code{print()} names the transform
+each regressor received.
+
+Both values are required, not just 0 and 1 as the permitted set: a constant
+column would otherwise be left in levels and become an intercept, which this
+equation deliberately does not have.
+
+\code{tr_exog = FALSE} is for the remaining cases, where the regressor is already
+stationary and its level is the economically meaningful quantity: a spread,
+a gap, a rate. It applies to all of them at once, so a mixture of those and
+genuine \eqn{\Delta W} regressors is still handled by differencing the
+relevant columns in \code{data} beforehand and passing \code{FALSE}.
 }
 
 \section{Standard errors}{

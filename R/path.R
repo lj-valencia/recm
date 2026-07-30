@@ -214,19 +214,28 @@ recm_future <- function(object, newdata, n_ahead, hold_w = FALSE) {
   }
 }
 
-# The exogenous regressors as they enter the equation. Under `tr_exog` the
-# first new difference is taken against the last level of the estimation
-# sample, which is the reason the fit carries it.
+# The exogenous regressors as they enter the equation, each transformed the
+# way its own estimation column was: differenced, or left in levels if it is a
+# dummy or if `tr_exog` was FALSE. Where a difference is taken, the first new
+# one is taken against the last level of the estimation sample, which is the
+# reason the fit carries it.
 recm_future_w <- function(object, fut) {
   w_names <- object$variables$w
   if (!length(w_names)) {
     return(matrix(0, fut$h, 0L))
   }
-  if (!object$tr_exog) {
-    return(unname(as.matrix(fut$w)))
+  # Fits made before the transform was recorded per column used one rule for
+  # all of them; reading it off `tr_exog` reproduces exactly what they did.
+  w_diff <- object$variables$w_diff
+  if (is.null(w_diff)) {
+    w_diff <- rep(object$tr_exog, length(w_names))
+  }
+  mat <- unname(as.matrix(fut$w))
+  if (!any(w_diff)) {
+    return(mat)
   }
   hist <- object$model$data
-  last <- hist[nrow(hist), w_names, drop = FALSE]
+  last <- hist[nrow(hist), w_names[w_diff], drop = FALSE]
   if (anyNA(last)) {
     stop(
       "the last observation of the exogenous regressors is missing, so the ",
@@ -236,7 +245,8 @@ recm_future_w <- function(object, fut) {
       call. = FALSE
     )
   }
-  unname(diff(rbind(last, as.matrix(fut$w))))
+  mat[, w_diff] <- diff(rbind(last, mat[, w_diff, drop = FALSE]))
+  mat
 }
 
 # The forward term over the future rows, at the fitted coefficients and the

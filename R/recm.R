@@ -21,15 +21,16 @@
 #' @param data A `ts`/`mts`, `data.frame` (tibbles and data tables qualify) or
 #'   named numeric matrix holding `y`, `y_star`, and any exogenous regressors.
 #'   **Every remaining numeric column is used as an exogenous regressor**
-#'   \eqn{W_t}, dated \eqn{t}. At most one non-numeric column is allowed and is
-#'   taken as the time index. No intercept is fitted: a free constant is
-#'   inconsistent with growth neutrality, and the auxiliary autoregression
-#'   carries the drift instead.
+#'   \eqn{W_t}, dated \eqn{t}. A logical column counts as numeric and is
+#'   converted to a 0/1 dummy. At most one genuinely non-numeric column is
+#'   allowed and is taken as the time index. No intercept is fitted: a free
+#'   constant is inconsistent with growth neutrality, and the auxiliary
+#'   autoregression carries the drift instead.
 #' @param tr_exog Difference the exogenous regressors, as `y` and `y_star` are
 #'   differenced. `TRUE`, the default, enters each of them as \eqn{\Delta W_t}
-#'   and labels the coefficient `d_<name>`. Set it to `FALSE` only for a
-#'   regressor that genuinely belongs in the equation in levels, such as a
-#'   dummy or a stationary spread; see the section below.
+#'   and labels the coefficient `d_<name>` — except for dummy variables, which
+#'   are recognised and left in levels under their own names. `FALSE` puts
+#'   every regressor in levels, dummy or not. See the section below.
 #' @param expectations How expectations of the target are formed. `"var"`
 #'   (default) uses the auxiliary univariate autoregression with information
 #'   dated \eqn{t-1}, giving \eqn{Z_t = h' z_{t-1}} in closed form. `"mce"`
@@ -67,10 +68,27 @@
 #' longer growth neutral whatever the coefficients do, which defeats the
 #' restriction above. `tr_exog = TRUE` therefore differences them by default.
 #'
-#' `tr_exog = FALSE` is right when the regressor is already stationary and its
-#' level is the economically meaningful quantity: a dummy, a spread, a gap. It
-#' applies to all of them at once, so mixed cases are handled by differencing
-#' the relevant columns in `data` beforehand and passing `FALSE`.
+#' Dummy variables are the exception, and are the one case the function
+#' settles for itself. A column whose observed values are all 0 or 1, with both
+#' present, is entered in levels even under `tr_exog = TRUE`, and keeps its own
+#' name rather than gaining the `d_` prefix. A dummy cannot trend, so the
+#' argument above does not apply to it, and differencing one destroys what it
+#' is for: a 0/1 indicator differences to a pair of opposite spikes at its
+#' edges and nothing in between, which shifts \eqn{\Delta y} in the two
+#' boundary periods rather than over the episode the dummy marks. The decision
+#' is taken per column, so a dummy and a differenced regressor coexist without
+#' either being transformed on the other's terms. `print()` names the transform
+#' each regressor received.
+#'
+#' Both values are required, not just 0 and 1 as the permitted set: a constant
+#' column would otherwise be left in levels and become an intercept, which this
+#' equation deliberately does not have.
+#'
+#' `tr_exog = FALSE` is for the remaining cases, where the regressor is already
+#' stationary and its level is the economically meaningful quantity: a spread,
+#' a gap, a rate. It applies to all of them at once, so a mixture of those and
+#' genuine \eqn{\Delta W} regressors is still handled by differencing the
+#' relevant columns in `data` beforehand and passing `FALSE`.
 #'
 #' @section Standard errors:
 #' The fixed point solves \eqn{X'(\Delta y - X\gamma - Z(a)) = 0}, which is
@@ -344,8 +362,12 @@ recm <- function(y, y_star, data,
       criterion = fit$criterion,
       nobs = tt,
       index = md$index[keep],
+      # `w_diff` records the transform per regressor rather than for all of
+      # them at once, because a dummy is left in levels even under
+      # `tr_exog = TRUE`. predict() and simulate() read it to transform the
+      # future path the same way the estimation sample was transformed.
       variables = list(y = y_name, y_star = ystar_name, w = des$w_names,
-                       w_terms = des$w_terms),
+                       w_terms = des$w_terms, w_diff = des$w_tr),
       # `data` and `index` are the whole sample, not the estimation rows:
       # predict() iterates the decision rule forward from the end of it and
       # needs y and y_star in levels, plus the last level of each exogenous
