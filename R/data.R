@@ -33,7 +33,8 @@ resolve_column <- function(expr, env, cols, arg) {
 #
 # At most one non-numeric column is tolerated in a data frame; it is taken as
 # the time index rather than as a regressor. Anything more is an error, because
-# silently dropping columns would silently drop regressors.
+# silently dropping columns would silently drop regressors. Logical columns do
+# not count as non-numeric: they are converted to 0/1 and kept as regressors.
 as_model_data <- function(data) {
   if (stats::is.ts(data)) {
     x <- as.matrix(data)
@@ -52,6 +53,15 @@ as_model_data <- function(data) {
     df <- as.data.frame(data, stringsAsFactors = FALSE)
     if (!ncol(df)) {
       stop("`data` has no columns.", call. = FALSE)
+    }
+    # A logical column is a dummy written the way R writes dummies, so it is
+    # converted to 0/1 rather than left to the non-numeric rule below. Without
+    # this it would be silently taken as the time index and never enter the
+    # equation at all, which is the worst of the available outcomes: no error,
+    # no warning, and a regressor quietly missing.
+    logical_col <- vapply(df, is.logical, logical(1))
+    if (any(logical_col)) {
+      df[logical_col] <- lapply(df[logical_col], as.numeric)
     }
     numeric_col <- vapply(df, is.numeric, logical(1))
     other <- names(df)[!numeric_col]
@@ -94,6 +104,20 @@ as_model_data <- function(data) {
   )
 }
 
+# Is a column a dummy: every observed value 0 or 1, with both present.
+#
+# Both must be present, and that half of the test is not pedantry. A column of
+# 1s passes the first half on its own, and a constant left in levels is an
+# intercept - which this equation does not have, deliberately, because a free
+# constant is inconsistent with growth neutrality. A constant column is a
+# degenerate regressor either way, but it should not become a constant term by
+# the back door.
+is_dummy_column <- function(v) {
+  seen <- v[!is.na(v)]
+  length(seen) > 0L && all(seen == 0 | seen == 1) &&
+    any(seen == 0) && any(seen == 1)
+}
+
 # Build the regressors of the rational error correction equation.
 #
 # The estimated equation is
@@ -110,14 +134,29 @@ as_model_data <- function(data) {
 # the equation: were W trending it would put a trend into dy and break the
 # growth neutrality the restriction is there to enforce. Differencing costs no
 # observations, since the first row is already lost to dy.
+#
+# Dummies are the exception, and are detected rather than declared. A dummy
+# cannot trend, so the argument above does not apply to it, and differencing
+# one destroys what it is for: a 0/1 indicator differences to a pair of
+# opposite spikes at its edges and nothing in between, which shifts the level
+# of dy in the two boundary periods instead of over the episode the dummy
+# marks. The decision is therefore taken per column, and `tr_exog = FALSE`
+# still puts every regressor in levels.
 build_design <- function(x, y_name, ystar_name, m, tr_exog) {
   n <- nrow(x)
   y <- x[, y_name]
   ystar <- x[, ystar_name]
   w_names <- setdiff(colnames(x), c(y_name, ystar_name))
-  # Guarded on length: paste0("d_", character(0)) recycles to "d_" rather than
-  # returning nothing, which would invent a regressor when there are none.
-  w_terms <- if (tr_exog && length(w_names)) paste0("d_", w_names) else w_names
+  w_tr <- rep(tr_exog, length(w_names))
+  if (tr_exog && length(w_names)) {
+    w_tr <- !vapply(w_names, function(nm) is_dummy_column(x[, nm]), logical(1))
+  }
+  # Subassignment rather than paste0 over the whole vector: with no regressors
+  # paste0("d_", character(0)) recycles to "d_" and would invent one, and here
+  # a zero-length index is simply a no-op.
+  w_terms <- w_names
+  w_terms[w_tr] <- paste0("d_", w_names[w_tr])
+  w_tr <- unname(w_tr)
 
   lag_vec <- function(v, k) c(rep(NA_real_, k), v[seq_len(n - k)])
 
@@ -135,7 +174,7 @@ build_design <- function(x, y_name, ystar_name, m, tr_exog) {
   }
   for (k in seq_along(w_names)) {
     wk <- x[, w_names[k]]
-    cols[[length(cols) + 1L]] <- if (tr_exog) c(NA_real_, diff(wk)) else wk
+    cols[[length(cols) + 1L]] <- if (w_tr[k]) c(NA_real_, diff(wk)) else wk
     nms <- c(nms, w_terms[k])
   }
 
@@ -147,7 +186,9 @@ build_design <- function(x, y_name, ystar_name, m, tr_exog) {
       paste(unique(nms[duplicated(nms)]), collapse = ", "),
       "). Rename the offending column of `data`: the error correction term is ",
       "called `ec`, the lags of the dependent variable `dy_lag1` and so on, ",
-      "and with `tr_exog = TRUE` each exogenous regressor is prefixed `d_`.",
+      "and with `tr_exog = TRUE` each differenced exogenous regressor is ",
+      "prefixed `d_` - a dummy is not differenced, so it keeps its own name ",
+      "and can collide where a differenced regressor could not.",
       call. = FALSE
     )
   }
@@ -156,5 +197,5 @@ build_design <- function(x, y_name, ystar_name, m, tr_exog) {
   colnames(design) <- nms
 
   list(dy = dy, dystar = dystar, x = design, w_names = w_names,
-       w_terms = w_terms, y = y, ystar = ystar)
+       w_terms = w_terms, w_tr = w_tr, y = y, ystar = ystar)
 }

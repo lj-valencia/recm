@@ -202,6 +202,35 @@ test_that("the first new difference of an exogenous regressor spans the join", {
                rep(unname(coef(fit)[["d_shock"]]), 5L))
 })
 
+test_that("a dummy is not differenced across the join either", {
+  df <- forecast_example(seed = 54L)
+  n <- nrow(df)
+  set.seed(55)
+  # The dummy is on at the end of the sample, so differencing the first future
+  # value against the last observed one would zero it: the two transforms give
+  # visibly different answers here rather than coinciding by luck.
+  df$policy <- as.numeric(seq_len(n) > n - 40L)
+  df$oil <- cumsum(stats::rnorm(n))
+  fit <- recm("y", "ystar", df)
+  expect_identical(fit$variables$w_terms, c("policy", "d_oil"))
+
+  nd <- data.frame(ystar = df$ystar[n] + cumsum(rep(0.3, 5)),
+                   policy = c(1, 1, 0, 0, 1),
+                   oil = df$oil[n] + cumsum(rep(0.2, 5)))
+  fc <- predict(fit, newdata = nd)
+
+  expect_equal(unname(fc$contributions$policy),
+               unname(coef(fit)[["policy"]]) * nd$policy)
+  # And its differenced neighbour is still differenced across the same join.
+  expect_equal(unname(fc$contributions$d_oil),
+               rep(unname(coef(fit)[["d_oil"]]) * 0.2, 5L))
+
+  # `newdata` goes through the same coercion as `data`, so the future path of
+  # the dummy may be written as logicals too.
+  nd_lgl <- transform(nd, policy = as.logical(policy))
+  expect_equal(predict(fit, newdata = nd_lgl)$fit, fc$fit)
+})
+
 test_that("a level regressor enters the forecast in levels", {
   df <- forecast_example(seed = 50L, extra = 0.5, tr_exog = FALSE)
   fit <- recm("y", "ystar", df, tr_exog = FALSE)

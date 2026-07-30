@@ -63,6 +63,36 @@ test_that("ts, matrix and data.frame inputs give identical fits", {
   expect_error(recm(y, ystar, worse), "more than one non-numeric")
 })
 
+test_that("a logical column is a dummy regressor, not the time index", {
+  df <- simulate_recm(n = 300L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 24)
+  n <- nrow(df)
+  on <- seq_len(n) %in% 80:140
+
+  # Logical is how R writes a dummy. Left to the non-numeric rule it would be
+  # taken as the time index and never enter the equation at all: no error, no
+  # warning, and a regressor quietly missing.
+  as_logical <- df
+  as_logical$recession <- on
+  fit <- recm(y, ystar, as_logical)
+  expect_identical(fit$variables$w, "recession")
+  expect_identical(fit$variables$w_terms, "recession")
+  expect_identical(fit$variables$w_diff, FALSE)
+
+  # And it is the same fit as writing the same dummy out as 0 and 1.
+  as_numeric <- df
+  as_numeric$recession <- as.numeric(on)
+  expect_equal(coef(fit), coef(recm(y, ystar, as_numeric)))
+
+  # The conversion also frees the one non-numeric slot for a real index, which
+  # a logical column used to occupy.
+  with_date <- as_logical
+  with_date$period <- as.Date("1980-01-01") + seq_len(n) * 90
+  fit_dated <- recm(y, ystar, with_date)
+  expect_identical(fit_dated$variables$w, "recession")
+  expect_s3_class(fit_dated$index, "Date")
+})
+
 test_that("remaining numeric columns enter as exogenous regressors", {
   df <- simulate_recm(n = 800L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
                       extra = 0.5, seed = 5)
@@ -96,6 +126,58 @@ test_that("tr_exog = FALSE leaves the exogenous regressors in levels", {
                "must be TRUE or FALSE")
 })
 
+test_that("the dummy test wants both values, not merely no others", {
+  expect_true(recm:::is_dummy_column(c(0, 1, 1, 0, 1)))
+  expect_true(recm:::is_dummy_column(c(0, 1, NA, 1, 0)))
+  # A constant is 0/1 valued and is still not a dummy. Left in levels it would
+  # be an intercept, which this equation deliberately does not have.
+  expect_false(recm:::is_dummy_column(rep(1, 10)))
+  expect_false(recm:::is_dummy_column(rep(0, 10)))
+  expect_false(recm:::is_dummy_column(c(0, 1, 2)))
+  expect_false(recm:::is_dummy_column(c(0, 0.5, 1)))
+  expect_false(recm:::is_dummy_column(c(-1, 0, 1)))
+  expect_false(recm:::is_dummy_column(c(NA_real_, NA_real_)))
+})
+
+test_that("a dummy is entered in levels beside a differenced regressor", {
+  df <- simulate_recm(n = 400L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 20)
+  n <- nrow(df)
+  set.seed(21)
+  df$recession <- as.numeric(seq_len(n) %in% 120:160)
+  df$oil <- cumsum(stats::rnorm(n))
+
+  fit <- recm(y, ystar, df)
+  expect_true(fit$tr_exog)
+  expect_identical(fit$variables$w, c("recession", "oil"))
+  # The transform is chosen per column, so the two coexist untransformed on
+  # one another's terms, and the names say which is which.
+  expect_identical(fit$variables$w_diff, c(FALSE, TRUE))
+  expect_identical(fit$variables$w_terms, c("recession", "d_oil"))
+
+  # The design column really is the dummy itself and not its difference. The
+  # kept rows are the trailing ones, every dropped row being a leading NA.
+  expect_equal(unname(fit$model$x[, "recession"]),
+               utils::tail(df$recession, fit$nobs))
+  expect_equal(unname(fit$model$x[, "d_oil"]),
+               utils::tail(diff(df$oil), fit$nobs), tolerance = 1e-12)
+
+  expect_output(print(fit), "recession \\(level\\), oil \\(first difference\\)")
+})
+
+test_that("tr_exog = FALSE puts everything in levels, dummy or not", {
+  df <- simulate_recm(n = 400L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
+                      seed = 22)
+  n <- nrow(df)
+  set.seed(23)
+  df$recession <- as.numeric(seq_len(n) %in% 100:140)
+  df$spread <- stats::rnorm(n)
+
+  fit <- recm(y, ystar, df, tr_exog = FALSE)
+  expect_identical(fit$variables$w_diff, c(FALSE, FALSE))
+  expect_identical(fit$variables$w_terms, c("recession", "spread"))
+})
+
 test_that("a design name collision is named rather than silently resolved", {
   df <- simulate_recm(n = 300L, a = 0.3, beta = 1, ar = 0.5, const = 0.2,
                       seed = 16)
@@ -105,11 +187,13 @@ test_that("a design name collision is named rather than silently resolved", {
   expect_error(recm(y, ystar, cbind(df, dy_lag1 = stats::rnorm(nrow(df))),
                     m = 2, tr_exog = FALSE), "duplicate column names")
 
-  # Differencing renames every regressor out of the way, so the collision
-  # cannot arise there: the `d_` prefix is injective and no reserved name
-  # carries it.
+  # Differencing renames a regressor out of the way, so a differenced one
+  # cannot collide: the `d_` prefix is injective and no reserved name carries
+  # it. A dummy keeps its own name, so it can collide where that one could not.
   fit <- recm(y, ystar, clash)
   expect_identical(fit$variables$w_terms, "d_ec")
+  dummy_clash <- cbind(df, ec = as.numeric(seq_len(nrow(df)) > 100))
+  expect_error(recm(y, ystar, dummy_clash), "duplicate column names")
 })
 
 test_that("a fit with no exogenous regressors carries no phantom term", {
